@@ -1,0 +1,418 @@
+Menu="OtherSettings"
+Title="Navigation Dropdown Menus"
+Icon="nav.dropdown.menus.png"
+Markdown="false"
+---
+<?php
+$cfgFile = '/boot/config/plugins/nav.dropdown.menus/nav.dropdown.menus.cfg';
+$cfg = is_readable($cfgFile) ? @parse_ini_file($cfgFile, false, INI_SCANNER_RAW) : [];
+$cfg = is_array($cfg) ? $cfg : [];
+
+function jnd_settings_bool($cfg, $key, $default = false) {
+    if (!array_key_exists($key, $cfg)) return (bool)$default;
+    return in_array(strtolower(trim((string)$cfg[$key])), ['1', 'yes', 'true', 'on'], true);
+}
+
+function jnd_settings_choice($cfg, $key, $allowed, $default) {
+    $value = trim((string)($cfg[$key] ?? ''));
+    return in_array($value, $allowed, true) ? $value : $default;
+}
+
+function jnd_settings_bool_select($id, $postName, $enabled) {
+    $disabledSelected = $enabled ? '' : ' selected';
+    $enabledSelected = $enabled ? ' selected' : '';
+    echo '<select id="' . $id . '" data-jnd-setting="' . $postName . '">';
+    echo '<option value="0"' . $disabledSelected . '>Disabled</option>';
+    echo '<option value="1"' . $enabledSelected . '>Enabled</option>';
+    echo '</select>';
+}
+
+$dropdowns = [
+    ['Main', 'jnd-dropdown-main', 'dropdown_main', jnd_settings_bool($cfg, 'DROPDOWN_MAIN', true)],
+    ['Shares', 'jnd-dropdown-shares', 'dropdown_shares', jnd_settings_bool($cfg, 'DROPDOWN_SHARES', true)],
+    ['Users', 'jnd-dropdown-users', 'dropdown_users', jnd_settings_bool($cfg, 'DROPDOWN_USERS', true)],
+    ['Settings', 'jnd-dropdown-settings', 'dropdown_settings', jnd_settings_bool($cfg, 'DROPDOWN_SETTINGS', true)],
+    ['Plugins', 'jnd-dropdown-plugins', 'dropdown_plugins', jnd_settings_bool($cfg, 'DROPDOWN_PLUGINS', true)],
+    ['Docker', 'jnd-dropdown-docker', 'dropdown_docker', jnd_settings_bool($cfg, 'DROPDOWN_DOCKER', true)],
+    ['VMs', 'jnd-dropdown-vms', 'dropdown_vms', jnd_settings_bool($cfg, 'DROPDOWN_VMS', true)],
+    ['Tools', 'jnd-dropdown-tools', 'dropdown_tools', jnd_settings_bool($cfg, 'DROPDOWN_TOOLS', true)],
+];
+
+$showUD = jnd_settings_bool($cfg, 'SHOW_UNASSIGNED_DEVICES', true);
+$dockerStatus = jnd_settings_bool($cfg, 'DOCKER_STATUS_INDICATORS', true);
+$dockerQuick = jnd_settings_bool($cfg, 'DOCKER_QUICK_ACTIONS', false);
+$dockerConfirm = jnd_settings_bool($cfg, 'DOCKER_CONFIRM_STOP', true);
+$dockerLogs = jnd_settings_bool($cfg, 'DOCKER_LOG_BUTTONS', true);
+$dockerWebUI = jnd_settings_bool($cfg, 'DOCKER_WEBUI_BUTTONS', true);
+$vmStatus = jnd_settings_bool($cfg, 'VM_STATUS_INDICATORS', true);
+$vmQuick = jnd_settings_bool($cfg, 'VM_QUICK_ACTIONS', false);
+$vmConfirm = jnd_settings_bool($cfg, 'VM_CONFIRM_STOP', true);
+$vmLogs = jnd_settings_bool($cfg, 'VM_LOG_BUTTONS', true);
+$vmVnc = jnd_settings_bool($cfg, 'VM_VNC_CONSOLE_BUTTONS', true);
+$webUiNewTab = jnd_settings_bool($cfg, 'WEBUI_NEW_TAB', true);
+$hoverOpenMs = jnd_settings_choice($cfg, 'HOVER_OPEN_MS', ['75', '100', '150', '200'], '100');
+$sortMode = jnd_settings_choice($cfg, 'SORT_MODE', ['unraid', 'alphabetical'], 'unraid');
+?>
+
+<style>
+#jnd-settings-root {
+    width: 100%;
+}
+#jnd-settings-root .jnd-settings-section {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 18px 0 0;
+    padding: 13px 15px 15px;
+    background: var(--mild-background-color);
+    border: 1px solid var(--table-border-color);
+    border-left: 3px solid var(--brand-orange);
+    border-radius: 3px;
+}
+#jnd-settings-root .jnd-settings-section > h3 {
+    margin: 0 0 11px;
+}
+#jnd-settings-root table.jnd-settings-table {
+    width: 100% !important;
+    table-layout: fixed;
+}
+#jnd-settings-root table.jnd-settings-table > tbody > tr > td:first-child {
+    width: 295px !important;
+}
+#jnd-settings-root table.jnd-settings-table select {
+    box-sizing: border-box;
+    width: 180px !important;
+}
+#jnd-settings-root table.jnd-settings-table td {
+    vertical-align: top;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+#jnd-settings-root table.jnd-settings-table td small,
+#jnd-settings-root .jnd-settings-info p {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+#jnd-settings-root .jnd-settings-actions {
+    margin: 18px 0 0;
+}
+#jnd-settings-root .jnd-settings-info p:last-child {
+    margin-bottom: 0;
+}
+@media (max-width: 720px) {
+    #jnd-settings-root table.jnd-settings-table,
+    #jnd-settings-root table.jnd-settings-table tbody,
+    #jnd-settings-root table.jnd-settings-table tr,
+    #jnd-settings-root table.jnd-settings-table td {
+        display: block;
+        width: 100% !important;
+    }
+    #jnd-settings-root table.jnd-settings-table td:first-child {
+        width: 100% !important;
+        margin-top: 7px;
+    }
+}
+</style>
+
+<div id="jnd-settings-root">
+    <h2>Navigation Dropdown Menus</h2>
+    <p>
+        Adds dynamic dropdown menus to the Unraid WebGUI main navigation for Main, Shares, Users, Settings, Plugins,
+        Docker, VMs, and Tools, with native icons, status indicators, and optional quick start-stop
+        controls for Docker and VMs.
+    </p>
+    <p>
+        Plugin is additive-only: it does not replace or modify stock Unraid WebGUI files.
+        If a dropdown is disabled or something it needs is unavailable, Unraid's normal parent navigation link keeps working as usual.
+    </p>
+
+    <div class="jnd-settings-section">
+        <h3>Dropdown menus</h3>
+        <table class="settings jnd-settings-table">
+            <?php foreach ($dropdowns as [$label, $id, $postName, $enabled]): ?>
+            <tr>
+                <td><strong><?=htmlspecialchars($label)?> dropdown</strong></td>
+                <td><?php jnd_settings_bool_select($id, $postName, $enabled); ?></td>
+            </tr>
+            <?php endforeach; ?>
+            <tr>
+                <td></td>
+                <td><small>Disabling a dropdown leaves the normal Unraid parent navigation link unchanged.</small></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="jnd-settings-section">
+        <h3>Menu behavior</h3>
+        <table class="settings jnd-settings-table">
+            <tr>
+                <td><strong>Hover-open delay</strong></td>
+                <td>
+                    <select id="jnd-hover-open-ms" data-jnd-setting="hover_open_ms">
+                        <?php foreach (['75', '100', '150', '200'] as $delay): ?>
+                        <option value="<?=$delay?>" <?=$hoverOpenMs === $delay ? 'selected' : ''?>><?=$delay?> ms</option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Sets how long the pointer must remain over an enabled navigation item before its dropdown opens.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Sort mode</strong></td>
+                <td>
+                    <select id="jnd-sort-mode" data-jnd-setting="sort_mode">
+                        <option value="unraid" <?=$sortMode === 'unraid' ? 'selected' : ''?>>Match Unraid order</option>
+                        <option value="alphabetical" <?=$sortMode === 'alphabetical' ? 'selected' : ''?>>Alphabetical</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Alphabetical sorting applies to Shares, Users, Docker containers, and VMs. Match Unraid order preserves the order supplied by Unraid.</small></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="jnd-settings-section">
+        <h3>Main</h3>
+        <table class="settings jnd-settings-table">
+            <tr>
+                <td><strong>Show Unassigned Devices</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-show-ud', 'show_unassigned_devices', $showUD); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled and Unassigned Devices is installed, currently mounted remote shares are included in the Main dropdown.</small></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="jnd-settings-section">
+        <h3>Docker</h3>
+        <table class="settings jnd-settings-table">
+            <tr>
+                <td><strong>Show status indicators</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-docker-status', 'docker_status_indicators', $dockerStatus); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows the current started, stopped, or paused status icon for each Docker container.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Docker quick actions</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-docker-quick', 'docker_quick_actions', $dockerQuick); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled, clicking a Docker status icon in the dropdown menu will start or gracefully stop that container.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Confirm stop actions</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-docker-confirm', 'docker_confirm_stop', $dockerConfirm); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled, a confirmation prompt is shown before a Docker quick action stops a running container.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Show log buttons</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-docker-logs', 'docker_log_buttons', $dockerLogs); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows a log button for each Docker container using Unraid's native container-log viewer.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Show WebUI buttons</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-docker-webui', 'docker_webui_buttons', $dockerWebUI); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows a globe button for Docker containers that have a valid WebUI URL reported by Unraid.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Open WebUI links in new tab</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-webui-new-tab', 'webui_new_tab', $webUiNewTab); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled, Docker WebUI buttons open their destination in a new browser tab. When disabled, the current tab is used.</small></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="jnd-settings-section">
+        <h3>Virtual Machines</h3>
+        <table class="settings jnd-settings-table">
+            <tr>
+                <td><strong>Show status indicators</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-vm-status', 'vm_status_indicators', $vmStatus); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows the current started, stopped, or paused status icon for each VM.</small></td>
+            </tr>
+            <tr>
+                <td><strong>VM quick actions</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-vm-quick', 'vm_quick_actions', $vmQuick); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled, clicking a VM status icon in the dropdown menu will start or gracefully stop that VM.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Confirm stop actions</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-vm-confirm', 'vm_confirm_stop', $vmConfirm); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>When enabled, a confirmation prompt is shown before a VM quick action requests a graceful stop.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Show VNC Console buttons</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-vm-vnc', 'vm_vnc_console_buttons', $vmVnc); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows a desktop button for running VMs when Unraid provides its native web VNC console.</small></td>
+            </tr>
+            <tr>
+                <td><strong>Show log buttons</strong></td>
+                <td><?php jnd_settings_bool_select('jnd-vm-logs', 'vm_log_buttons', $vmLogs); ?></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td><small>Shows a log button when Unraid reports a log for that VM.</small></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="jnd-settings-actions">
+        <input type="button" id="jnd-settings-apply" value="Apply">
+        <span id="jnd-settings-status" style="margin-left:10px"></span>
+    </div>
+
+    <div class="jnd-settings-section jnd-settings-info">
+        <h3>Information</h3>
+        <p>
+            <strong>Appearance:</strong> Dropdown menus automatically follow Unraid's active
+            <strong>Dynamix color theme</strong> configured under
+            <a href="/Settings/UserPreferences/DisplaySettings">Settings &rarr; User Preferences &rarr; Display Settings</a>.
+            No separate color configuration is required.
+        </p>
+        <p>
+            <strong>After installing or updating:</strong> The plugin normally appears after the WebGUI reloads.
+            If the dropdown menus do not appear in the main navigation, perform a hard refresh of the Unraid WebGUI.
+            On Windows or Linux, press <strong>Ctrl+F5</strong>. On macOS, use
+            <strong>Command+Shift+R</strong> where supported.
+        </p>
+        <p><strong>Emergency browser-session bypass:</strong> append <code>?navdropdowns=off</code> to an Unraid WebGUI URL. Use <code>?navdropdowns=on</code> to re-enable it. This temporary, non-persistent bypass affects only the current browser tab.</p>
+    </div>
+</div>
+
+<script>
+(() => {
+    'use strict';
+
+    const button = document.getElementById('jnd-settings-apply');
+    const status = document.getElementById('jnd-settings-status');
+    const controls = Array.from(document.querySelectorAll('[data-jnd-setting]'));
+
+    if (!button || !status || !controls.length || !window.jQuery) return;
+
+    const byId = (id) => document.getElementById(id);
+    const saved = new Map(controls.map(control => [control.id, control.value]));
+    const enabled = (id) => byId(id)?.value === '1';
+
+    const setDisabled = (id, disabled) => {
+        const control = byId(id);
+        if (!control) return;
+        control.disabled = !!disabled;
+        control.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    };
+
+    const syncDependencies = () => {
+        const mainEnabled = enabled('jnd-dropdown-main');
+        const dockerEnabled = enabled('jnd-dropdown-docker');
+        const vmEnabled = enabled('jnd-dropdown-vms');
+        const dockerStatusEnabled = enabled('jnd-docker-status');
+        const vmStatusEnabled = enabled('jnd-vm-status');
+        const dockerQuickEnabled = enabled('jnd-docker-quick');
+        const vmQuickEnabled = enabled('jnd-vm-quick');
+        const dockerWebUiEnabled = enabled('jnd-docker-webui');
+
+        setDisabled('jnd-show-ud', !mainEnabled);
+
+        setDisabled('jnd-docker-status', !dockerEnabled);
+        setDisabled('jnd-docker-quick', !dockerEnabled || !dockerStatusEnabled);
+        setDisabled('jnd-docker-confirm', !dockerEnabled || !dockerStatusEnabled || !dockerQuickEnabled);
+        setDisabled('jnd-docker-logs', !dockerEnabled);
+        setDisabled('jnd-docker-webui', !dockerEnabled);
+        setDisabled('jnd-webui-new-tab', !dockerEnabled || !dockerWebUiEnabled);
+
+        setDisabled('jnd-vm-status', !vmEnabled);
+        setDisabled('jnd-vm-quick', !vmEnabled || !vmStatusEnabled);
+        setDisabled('jnd-vm-confirm', !vmEnabled || !vmStatusEnabled || !vmQuickEnabled);
+        setDisabled('jnd-vm-vnc', !vmEnabled);
+        setDisabled('jnd-vm-logs', !vmEnabled);
+    };
+
+    const changed = () => controls.some(control => control.value !== saved.get(control.id));
+
+    const syncApply = () => {
+        button.disabled = !changed();
+    };
+
+    const onSettingChange = () => {
+        status.textContent = '';
+        syncDependencies();
+        setTimeout(syncApply, 0);
+    };
+
+    controls.forEach(control => control.addEventListener('change', onSettingChange));
+
+    syncDependencies();
+    button.disabled = true;
+    setTimeout(syncApply, 0);
+
+    button.addEventListener('click', () => {
+        if (!changed()) return;
+
+        const payload = {};
+        for (const control of controls) {
+            payload[control.dataset.jndSetting] = control.value;
+        }
+
+        button.disabled = true;
+        status.textContent = 'Saving...';
+
+        window.jQuery.ajax({
+            url: '/plugins/nav.dropdown.menus/settings.php',
+            type: 'POST',
+            dataType: 'json',
+            data: payload,
+        }).done((data) => {
+            if (!data || data.ok !== true) {
+                status.textContent = 'Save failed.';
+                setTimeout(syncApply, 0);
+                return;
+            }
+
+            status.textContent = 'Saved. Reloading...';
+            setTimeout(() => window.location.reload(), 450);
+        }).fail((xhr) => {
+            let message = 'Save failed.';
+            try {
+                const data = JSON.parse(xhr.responseText || '{}');
+                if (data.error) message += ` ${data.error}`;
+            } catch (_) {}
+
+            status.textContent = message;
+            setTimeout(syncApply, 0);
+        });
+    });
+})();
+</script>

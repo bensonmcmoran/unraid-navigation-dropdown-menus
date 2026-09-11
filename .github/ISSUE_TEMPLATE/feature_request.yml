@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest an improvement or new capability for Navigation Dropdown Menus.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to suggest improvements or new capabilities for Navigation Dropdown Menus.
+
+        Please search existing issues before submitting a new request.
+
+  - type: textarea
+    id: request
+    attributes:
+      label: Feature request
+      description: Describe the feature or improvement you would like to see.
+      placeholder: Describe the requested behavior as clearly as possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Explain the problem this would solve or the workflow it would improve.
+      placeholder: Describe why this would be useful and when you would use it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-behavior
+    attributes:
+      label: Proposed behavior
+      description: If you have a specific interaction or behavior in mind, describe it here.
+      placeholder: Describe how you think the feature should work.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any existing workflow, workaround, or alternative you have considered.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, examples, links, or other context that may help explain the request.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues for the same or a similar request.
+          required: true
+        - label: This request is related to Navigation Dropdown Menus.
+          required: true

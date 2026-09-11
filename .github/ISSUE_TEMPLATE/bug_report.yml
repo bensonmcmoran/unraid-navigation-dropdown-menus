@@ -1,0 +1,96 @@
+name: Bug report
+description: Report a reproducible problem with Navigation Dropdown Menus.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem with Navigation Dropdown Menus.
+
+        Please do not use this form to report security vulnerabilities. Use GitHub's private vulnerability reporting feature instead.
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Navigation Dropdown Menus version
+      description: Enter the installed plugin version.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: unraid-version
+    attributes:
+      label: Unraid OS version
+      description: Enter the Unraid OS version where the problem occurs.
+      placeholder: "7.3.2"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Enter the browser name and version where the problem occurs.
+      placeholder: "Google Chrome 152"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: Describe what is happening and which dropdown menu or feature is affected.
+      placeholder: Describe the problem clearly and include any relevant details.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List the steps that reliably reproduce the problem.
+      placeholder: |
+        1. Open ...
+        2. Hover over ...
+        3. Click ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics
+      description: Include relevant browser-console messages, Unraid logs, or screenshots. Remove passwords, tokens, private keys, and other unrelated sensitive information before posting.
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add anything else that may help reproduce or understand the problem.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I am using Unraid OS 7.3.2 or later.
+          required: true
+        - label: I performed a hard browser refresh and confirmed the problem still occurs.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: This report does not contain passwords, authentication tokens, private keys, or other unrelated sensitive information.
+          required: true

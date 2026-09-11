@@ -1,0 +1,802 @@
+Menu="Buttons:298"
+Link="jnd-loader"
+---
+<?php
+/*
+ * Navigation Dropdown Menus
+ * Additive only. No stock Unraid navigation file is replaced or modified.
+ */
+
+if (!function_exists('jnd_clean_label')) {
+    function jnd_clean_label($value, $fallback = '') {
+        $value = trim(strip_tags((string)$value));
+        return $value !== '' ? $value : (string)$fallback;
+    }
+
+    function jnd_page_label($page) {
+        $fallback = (string)($page['name'] ?? '');
+        $raw = $page['Title'] ?? ($page['Name'] ?? $fallback);
+        if (function_exists('_')) {
+            $raw = _((string)$raw);
+        }
+        return jnd_clean_label($raw, $fallback);
+    }
+
+    function jnd_safe_page_name($value) {
+        $value = (string)$value;
+        return preg_match('/^[A-Za-z0-9._~-]+$/', $value) ? $value : '';
+    }
+
+    function jnd_safe_internal_launch($value) {
+        $value = trim((string)$value);
+        if ($value === '') return null;
+        if (preg_match('/[\x00-\x1F\x7F]/', $value)) return null;
+        if (str_contains($value, '://') || str_starts_with($value, '//')) return null;
+        $value = '/' . ltrim($value, '/');
+        return preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/?#-]+$#', $value) ? $value : null;
+    }
+
+    function jnd_web_root($root) {
+        $root = str_replace('\\', '/', trim((string)$root));
+        if ($root === '') return '';
+        return trim($root, '/');
+    }
+
+    function jnd_safe_web_path($path) {
+        $path = trim((string)$path);
+        if ($path === '' || !str_starts_with($path, '/')) return null;
+        if (preg_match('/[\x00-\x1F\x7F]/', $path)) return null;
+        if (str_contains($path, '://') || str_starts_with($path, '//')) return null;
+        return preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/?#-]+$#', $path) ? $path : null;
+    }
+
+    function jnd_class_icon($value, $extra = '') {
+        $value = trim((string)$value);
+        if ($value === '') return null;
+
+        if (str_starts_with($value, 'icon-')) {
+            if (!preg_match('/^icon-[A-Za-z0-9_-]+$/', $value)) return null;
+            $class = $value;
+        } else {
+            if (!str_starts_with($value, 'fa-')) $value = 'fa-' . $value;
+            if (!preg_match('/^fa-[A-Za-z0-9_-]+$/', $value)) return null;
+            $class = 'fa ' . $value;
+        }
+
+        $extra = trim((string)$extra);
+        if ($extra !== '') $class .= ' ' . $extra;
+        return ['kind' => 'class', 'className' => $class];
+    }
+
+    /*
+     * Matches PageBuilder::tab_title() for category/menu headings.
+     * Tag="cog" -> fa fa-cog title
+     * Tag="icon-..." -> icon-... title
+     * Tag="something.png" -> <root>/icons/something.png when present
+     */
+    function jnd_title_icon_descriptor($page) {
+        global $docroot;
+
+        $tag = trim((string)($page['Tag'] ?? ''));
+        $root = jnd_web_root($page['root'] ?? '');
+        $title = jnd_page_label($page);
+
+        if ($tag === '' || str_ends_with(strtolower($tag), '.png')) {
+            $fileName = $tag !== ''
+                ? basename($tag)
+                : strtolower(str_replace(' ', '', $title)) . '.png';
+
+            if ($root !== '' && $fileName !== '') {
+                $fs = rtrim($docroot, '/') . '/' . $root . '/icons/' . $fileName;
+                if (is_file($fs)) {
+                    return [
+                        'kind' => 'img',
+                        'src' => '/' . $root . '/icons/' . rawurlencode($fileName),
+                    ];
+                }
+            }
+
+            return jnd_class_icon('fa-th', 'title');
+        }
+
+        return jnd_class_icon($tag, 'title');
+    }
+
+    /*
+     * Matches MainContent::process_icon() for Settings/Tools panel entries.
+     * Missing Icon -> icon-app PanelIcon.
+     * PNG -> plugin/page-owned image.
+     * icon-* -> native Unraid icon font.
+     * otherwise -> Font Awesome.
+     */
+    function jnd_panel_icon_descriptor($page) {
+        global $docroot;
+
+        $icon = trim((string)($page['Icon'] ?? ''));
+        $root = jnd_web_root($page['root'] ?? '');
+
+        if ($icon === '') {
+            return ['kind' => 'class', 'className' => 'icon-app PanelIcon'];
+        }
+
+        if (str_ends_with(strtolower(parse_url($icon, PHP_URL_PATH) ?: $icon), '.png')) {
+            if (str_starts_with($icon, '/')) {
+                $safe = jnd_safe_web_path($icon);
+                if ($safe !== null && is_file(rtrim($docroot, '/') . parse_url($safe, PHP_URL_PATH))) {
+                    return ['kind' => 'img', 'src' => $safe];
+                }
+            }
+
+            $base = basename(parse_url($icon, PHP_URL_PATH) ?: $icon);
+            if ($root !== '' && $base !== '') {
+                foreach ([
+                    [$root . '/images/' . $base, '/' . $root . '/images/' . rawurlencode($base)],
+                    [$root . '/' . $base, '/' . $root . '/' . rawurlencode($base)],
+                ] as [$fsRel, $web]) {
+                    if (is_file(rtrim($docroot, '/') . '/' . $fsRel)) {
+                        return ['kind' => 'img', 'src' => $web];
+                    }
+                }
+            }
+
+            return ['kind' => 'class', 'className' => 'icon-app PanelIcon'];
+        }
+
+        if (str_starts_with($icon, '<')) {
+            /*
+             * Do not inject arbitrary plugin HTML into the dropdown. Support the
+             * two safe icon forms Unraid commonly embeds, otherwise fall back.
+             */
+            if (preg_match('/<img\b[^>]*\bsrc=["\']([^"\']+)["\']/i', $icon, $m)) {
+                $safe = jnd_safe_web_path(html_entity_decode($m[1], ENT_QUOTES));
+                if ($safe !== null) return ['kind' => 'img', 'src' => $safe];
+            }
+            if (preg_match('/<i\b[^>]*\bclass=["\']([^"\']+)["\']/i', $icon, $m)) {
+                $classes = preg_split('/\s+/', trim($m[1]));
+                $allowed = [];
+                foreach ($classes as $class) {
+                    if (
+                        $class === 'fa' ||
+                        $class === 'title' ||
+                        $class === 'PanelIcon' ||
+                        preg_match('/^(?:fa|icon)-[A-Za-z0-9_-]+$/', $class)
+                    ) {
+                        $allowed[] = $class;
+                    }
+                }
+                if (!empty($allowed)) {
+                    return ['kind' => 'class', 'className' => implode(' ', array_unique($allowed))];
+                }
+            }
+
+            return ['kind' => 'class', 'className' => 'icon-app PanelIcon'];
+        }
+
+        return jnd_class_icon($icon, 'PanelIcon');
+    }
+
+    function jnd_plugin_icon_descriptor($docroot, $pluginName, $pluginFile) {
+        $pluginName = basename((string)$pluginName);
+        $raw = function_exists('plugin') ? trim((string)(plugin('icon', $pluginFile) ?: '')) : '';
+
+        /*
+         * Mirror stock ShowPlugins.php:
+         *   - explicit plugin "icon" attribute: PNG / icon-* / Font Awesome
+         *   - otherwise PluginHelpers::icon($name), which returns a path relative
+         *     to the emhttp document root (for example
+         *     plugins/composerize/images/composerize.png).
+         */
+        if ($raw !== '') {
+            if (str_ends_with(strtolower(parse_url($raw, PHP_URL_PATH) ?: $raw), '.png')) {
+                $base = basename(parse_url($raw, PHP_URL_PATH) ?: $raw);
+
+                if (str_starts_with($raw, '/')) {
+                    $safe = jnd_safe_web_path($raw);
+                    if ($safe !== null && is_file(rtrim($docroot, '/') . parse_url($safe, PHP_URL_PATH))) {
+                        return [
+                            'kind' => 'img',
+                            'src' => $safe,
+                            'fallback' => '/webGui/images/plg.png',
+                        ];
+                    }
+                }
+
+                foreach ([
+                    "plugins/$pluginName/images/$base",
+                    "plugins/$pluginName/$base",
+                ] as $candidate) {
+                    if (is_file(rtrim($docroot, '/') . '/' . $candidate)) {
+                        return [
+                            'kind' => 'img',
+                            'src' => '/' . $candidate,
+                            'fallback' => '/webGui/images/plg.png',
+                        ];
+                    }
+                }
+
+                return [
+                    'kind' => 'img',
+                    'src' => '/plugins/dynamix.plugin.manager/images/dynamix.plugin.manager.png',
+                    'fallback' => '/webGui/images/plg.png',
+                ];
+            }
+
+            $classIcon = jnd_class_icon($raw, 'PanelIcon');
+            if ($classIcon !== null) return $classIcon;
+        }
+
+        /*
+         * Do not call PluginHelpers::icon() here. That stock helper uses
+         * relative filesystem paths such as "plugins/<name>/...", which works
+         * inside ShowPlugins.php because its request executes with emhttp as
+         * the working directory. This hidden navigation page can execute with
+         * a different CWD, causing icon() to incorrectly fall through to the
+         * generic green plugin icon.
+         *
+         * Reproduce the stock lookup order with absolute $docroot filesystem
+         * checks, while returning the equivalent browser path.
+         */
+        $imageBase = @preg_split('/[\._\- ]/', $pluginName)[0] ?? $pluginName;
+
+        foreach ([
+            "plugins/$pluginName/images/$pluginName.png",
+            "plugins/$pluginName/$pluginName.png",
+            "plugins/$pluginName/images/$imageBase.png",
+            "plugins/$pluginName/$imageBase.png",
+        ] as $candidate) {
+            if (is_file(rtrim($docroot, '/') . '/' . $candidate)) {
+                return [
+                    'kind' => 'img',
+                    'src' => '/' . $candidate,
+                    'fallback' => '/webGui/images/plg.png',
+                ];
+            }
+        }
+
+        return [
+            'kind' => 'img',
+            'src' => '/webGui/images/plg.png',
+        ];
+    }
+
+    function jnd_tree($menu, $basePath, $depth = 0, $maxDepth = 1, $parentLinks = true) {
+        $out = [];
+        if (!function_exists('find_pages')) return $out;
+
+        try {
+            $pages = find_pages($menu);
+        } catch (Throwable $e) {
+            return $out;
+        }
+
+        foreach ($pages as $page) {
+            $name = jnd_safe_page_name($page['name'] ?? '');
+            if ($name === '') continue;
+
+            $href = rtrim($basePath, '/') . '/' . rawurlencode($name);
+            $type = strtolower((string)($page['Type'] ?? ''));
+            $isMenu = ($type === 'menu' || $type === 'xmenu');
+
+            $item = [
+                'type'   => 'item',
+                'label'  => jnd_page_label($page),
+                'href'   => $href,
+                'plugin' => basename((string)($page['root'] ?? '')),
+                'icon'   => ($depth === 0 && $isMenu)
+                    ? jnd_title_icon_descriptor($page)
+                    : jnd_panel_icon_descriptor($page),
+            ];
+
+            if ($depth < $maxDepth && $isMenu) {
+                $children = jnd_tree($name, $href, $depth + 1, $maxDepth, $parentLinks);
+                if (!empty($children)) {
+                    $item['type'] = 'submenu';
+                    $item['children'] = $children;
+                    if (!$parentLinks) $item['href'] = null;
+                }
+            }
+
+            $out[] = $item;
+        }
+
+        return $out;
+    }
+
+    function jnd_plugin_key($value) {
+        return strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$value));
+    }
+
+    function jnd_collect_plugin_pages($nodes, &$index, $depth = 0) {
+        foreach ((array)$nodes as $node) {
+            if (!is_array($node)) continue;
+
+            $plugin = basename((string)($node['plugin'] ?? ''));
+            $href = (string)($node['href'] ?? '');
+            $label = jnd_clean_label($node['label'] ?? '');
+
+            if ($plugin !== '' && $href !== '' && $label !== '') {
+                $key = jnd_plugin_key($plugin);
+                if ($key !== '') {
+                    $index[$key][] = [
+                        'plugin' => $plugin,
+                        'label' => $label,
+                        'href' => $href,
+                        'depth' => $depth,
+                    ];
+                }
+            }
+
+            if (!empty($node['children']) && is_array($node['children'])) {
+                jnd_collect_plugin_pages($node['children'], $index, $depth + 1);
+            }
+        }
+    }
+
+    function jnd_find_plugin_page($identities, $index) {
+        $keys = [];
+        foreach ((array)$identities as $identity) {
+            $key = jnd_plugin_key($identity);
+            if ($key !== '') $keys[$key] = true;
+        }
+        $keys = array_keys($keys);
+
+        $candidates = [];
+
+        /* Exact normalized plugin-directory match first. */
+        foreach ($keys as $key) {
+            foreach ((array)($index[$key] ?? []) as $candidate) {
+                $candidate['matchRank'] = 0;
+                $candidates[] = $candidate;
+            }
+        }
+
+        /*
+         * Some plugin package IDs and WebGUI directory IDs differ only by a
+         * vendor prefix (for example "dynamix."). Permit a suffix match only
+         * when an exact match did not resolve anything.
+         */
+        if (empty($candidates)) {
+            foreach ($index as $rootKey => $items) {
+                foreach ($keys as $key) {
+                    if ($key === '' || $rootKey === '') continue;
+                    if (str_ends_with($rootKey, $key) || str_ends_with($key, $rootKey)) {
+                        foreach ((array)$items as $candidate) {
+                            $candidate['matchRank'] = 1;
+                            $candidates[] = $candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($candidates)) return null;
+
+        usort($candidates, static function($a, $b) {
+            $rank = ((int)($a['matchRank'] ?? 9)) <=> ((int)($b['matchRank'] ?? 9));
+            if ($rank !== 0) return $rank;
+
+            $depth = ((int)($a['depth'] ?? 99)) <=> ((int)($b['depth'] ?? 99));
+            if ($depth !== 0) return $depth;
+
+            /* Prefer Settings over Tools when both are exposed. */
+            $aSettings = str_starts_with((string)($a['href'] ?? ''), '/Settings/') ? 0 : 1;
+            $bSettings = str_starts_with((string)($b['href'] ?? ''), '/Settings/') ? 0 : 1;
+            if ($aSettings !== $bSettings) return $aSettings <=> $bSettings;
+
+            return strnatcasecmp((string)($a['href'] ?? ''), (string)($b['href'] ?? ''));
+        });
+
+        return $candidates[0];
+    }
+
+    function jnd_markdown_display_title($docroot, $pluginNames, $fallback = '') {
+        foreach ((array)$pluginNames as $pluginName) {
+            $pluginName = basename((string)$pluginName);
+            if ($pluginName === '') continue;
+
+            $readme = rtrim((string)$docroot, '/') . '/plugins/' . $pluginName . '/README.md';
+            if (!is_readable($readme)) continue;
+
+            $lines = @file($readme, FILE_IGNORE_NEW_LINES);
+            if (!is_array($lines)) continue;
+
+            foreach (array_slice($lines, 0, 40) as $line) {
+                $line = trim((string)$line);
+                if ($line === '') continue;
+
+                $title = null;
+
+                if (preg_match('/^#{1,6}\s+(.+?)\s*#*$/', $line, $m)) {
+                    $title = $m[1];
+                } elseif (preg_match('/^\*\*(.+?)\*\*$/', $line, $m)) {
+                    $title = $m[1];
+                } elseif (preg_match('/^__(.+?)__$/', $line, $m)) {
+                    $title = $m[1];
+                }
+
+                if ($title !== null) {
+                    /* Remove simple Markdown link/image markup from a title line. */
+                    $title = preg_replace('/!\[([^\]]*)\]\([^)]+\)/', '$1', $title);
+                    $title = preg_replace('/\[([^\]]+)\]\([^)]+\)/', '$1', $title);
+                    $title = preg_replace('/[`*_~]+/', '', (string)$title);
+                    $title = jnd_clean_label($title);
+                    if ($title !== '') return $title;
+                }
+            }
+        }
+
+        return jnd_clean_label($fallback);
+    }
+
+    function jnd_disk_label($name) {
+        if (function_exists('my_disk')) {
+            try {
+                $label = my_disk($name);
+                if (is_string($label) && trim(strip_tags($label)) !== '') {
+                    return trim(strip_tags($label));
+                }
+            } catch (Throwable $e) {
+                // Fall back to logical name.
+            }
+        }
+        return (string)$name;
+    }
+
+    function jnd_file_browser_href($section, $mountpoint) {
+        $mountpoint = trim((string)$mountpoint);
+        if ($mountpoint === '' || !str_starts_with($mountpoint, '/')) return null;
+        return '/' . $section . '/Browse?dir=' . rawurlencode($mountpoint);
+    }
+
+    function jnd_folder_icon_descriptor() {
+        return ['kind' => 'class', 'className' => 'fa fa-folder-o'];
+    }
+
+    function jnd_user_image_descriptor($name) {
+        $name = trim((string)$name);
+        $fallback = '/webGui/images/user.png';
+
+        if ($name === '' || str_contains($name, '/') || str_contains($name, "\0")) {
+            return ['kind' => 'img', 'src' => $fallback, 'variant' => 'avatar'];
+        }
+
+        /*
+         * Match Unraid's UserList/UserEdit convention:
+         * custom user images live under /boot/config/plugins/dynamix/users,
+         * with /webGui/images/user.png as the stock fallback.
+         */
+        $file = '/boot/config/plugins/dynamix/users/' . $name . '.png';
+        if (!is_file($file)) {
+            return ['kind' => 'img', 'src' => $fallback, 'variant' => 'avatar'];
+        }
+
+        $src = '/boot/config/plugins/dynamix/users/' . rawurlencode($name) . '.png';
+        $mtime = @filemtime($file);
+        if ($mtime !== false) $src .= '?v=' . (string)$mtime;
+
+        return [
+            'kind' => 'img',
+            'src' => $src,
+            'fallback' => $fallback,
+            'variant' => 'avatar',
+        ];
+    }
+
+    function jnd_plugin_settings() {
+        static $cfg = null;
+        if ($cfg !== null) return $cfg;
+
+        $file = '/boot/config/plugins/nav.dropdown.menus/nav.dropdown.menus.cfg';
+        $parsed = is_readable($file) ? @parse_ini_file($file, false, INI_SCANNER_RAW) : [];
+        $cfg = is_array($parsed) ? $parsed : [];
+        return $cfg;
+    }
+
+    function jnd_cfg_bool($key, $default = false) {
+        $cfg = jnd_plugin_settings();
+        if (!array_key_exists($key, $cfg)) return (bool)$default;
+        return in_array(strtolower(trim((string)$cfg[$key])), ['1', 'yes', 'true', 'on'], true);
+    }
+
+    function jnd_cfg_choice($key, $allowed, $default) {
+        $cfg = jnd_plugin_settings();
+        $value = trim((string)($cfg[$key] ?? ''));
+        return in_array($value, $allowed, true) ? $value : $default;
+    }
+}
+
+$jndBootstrap = (static function () {
+    global $var, $display, $disks, $shares, $users, $docroot;
+
+    $jndDockerStatus = jnd_cfg_bool('DOCKER_STATUS_INDICATORS', true);
+    $jndVmStatus = jnd_cfg_bool('VM_STATUS_INDICATORS', true);
+
+    $jndBootstrap = [
+        'schema' => 3,
+        'version' => '1.0.0',
+        'unraidVersion' => (string)($var['version'] ?? ''),
+        'providers' => [],
+        'dropdowns' => [
+            'Main' => jnd_cfg_bool('DROPDOWN_MAIN', true),
+            'Shares' => jnd_cfg_bool('DROPDOWN_SHARES', true),
+            'Users' => jnd_cfg_bool('DROPDOWN_USERS', true),
+            'Settings' => jnd_cfg_bool('DROPDOWN_SETTINGS', true),
+            'Plugins' => jnd_cfg_bool('DROPDOWN_PLUGINS', true),
+            'Docker' => jnd_cfg_bool('DROPDOWN_DOCKER', true),
+            'VMs' => jnd_cfg_bool('DROPDOWN_VMS', true),
+            'Tools' => jnd_cfg_bool('DROPDOWN_TOOLS', true),
+        ],
+        'preferences' => [
+            'hoverOpenMs' => (int)jnd_cfg_choice('HOVER_OPEN_MS', ['75', '100', '150', '200'], '100'),
+            'sortMode' => jnd_cfg_choice('SORT_MODE', ['unraid', 'alphabetical'], 'unraid'),
+        ],
+        'features' => [
+            'udAvailable' => is_file('/usr/local/emhttp/plugins/unassigned.devices/include/UnassignedDevices.php'),
+            'ud' => is_file('/usr/local/emhttp/plugins/unassigned.devices/include/UnassignedDevices.php') &&
+                    jnd_cfg_bool('SHOW_UNASSIGNED_DEVICES', true),
+            'statusIndicators' => [
+                'docker' => $jndDockerStatus,
+                'vms' => $jndVmStatus,
+            ],
+            'quickActions' => [
+                'docker' => $jndDockerStatus && jnd_cfg_bool('DOCKER_QUICK_ACTIONS', false),
+                'vms' => $jndVmStatus && jnd_cfg_bool('VM_QUICK_ACTIONS', false),
+            ],
+            'confirmStop' => [
+                'docker' => jnd_cfg_bool('DOCKER_CONFIRM_STOP', true),
+                'vms' => jnd_cfg_bool('VM_CONFIRM_STOP', true),
+            ],
+            'dockerLogButtons' => jnd_cfg_bool('DOCKER_LOG_BUTTONS', true),
+            'vmLogButtons' => jnd_cfg_bool('VM_LOG_BUTTONS', true),
+            'vmVncConsoleButtons' => jnd_cfg_bool('VM_VNC_CONSOLE_BUTTONS', true),
+            'dockerWebUIButtons' => jnd_cfg_bool('DOCKER_WEBUI_BUTTONS', true),
+            'webUiNewTab' => jnd_cfg_bool('WEBUI_NEW_TAB', true),
+        ],
+        'udDisplay' => (isset($display) && is_array($display)) ? $display : new stdClass(),
+    ];
+
+    /*
+     * MAIN
+     * Reverse the stock Main-page emphasis:
+     *   - pool/device labels navigate into File Manager
+     *   - configuration remains on /Main itself
+     */
+    $jndMain = [];
+    $jndPools = [];
+    $jndArray = [];
+    $jndBoot = null;
+
+    if (isset($disks) && is_array($disks)) {
+        foreach ($disks as $diskKey => $disk) {
+            if (!is_array($disk)) continue;
+
+            $name = (string)($disk['name'] ?? $diskKey);
+            $device = trim((string)($disk['device'] ?? ''));
+            $type = strtolower(trim((string)($disk['type'] ?? '')));
+            $status = (string)($disk['status'] ?? '');
+            $mountpoint = trim((string)($disk['fsMountpoint'] ?? ''));
+
+            if ($name === '' || $device === '' || $status === 'DISK_NP') continue;
+
+            if ($type === 'flash' || $name === 'flash') {
+                if ($mountpoint === '') $mountpoint = '/boot';
+                $jndBoot = [
+                    'type' => 'item',
+                    'label' => 'Boot (Flash)',
+                    'href' => jnd_file_browser_href('Main', $mountpoint),
+                    'icon' => jnd_folder_icon_descriptor(),
+                    'indent' => 1,
+                ];
+                continue;
+            }
+
+            if ($type === 'cache') {
+                $pool = function_exists('pool_name')
+                    ? (string)pool_name($name)
+                    : preg_replace('/\d+$/', '', $name);
+
+                if ($pool === '') $pool = $name;
+                if (!isset($jndPools[$pool])) {
+                    $jndPools[$pool] = [
+                        'mountpoint' => $mountpoint,
+                        'members' => [],
+                    ];
+                }
+                if ($jndPools[$pool]['mountpoint'] === '' && $mountpoint !== '') {
+                    $jndPools[$pool]['mountpoint'] = $mountpoint;
+                }
+                $jndPools[$pool]['members'][] = $name;
+                continue;
+            }
+
+            if (in_array($type, ['parity', 'data', 'disk'], true) && $mountpoint !== '') {
+                $jndArray[] = [
+                    'type' => 'item',
+                    'label' => jnd_disk_label($name),
+                    'href' => jnd_file_browser_href('Main', $mountpoint),
+                    'icon' => jnd_folder_icon_descriptor(),
+                    'indent' => 1,
+                ];
+            }
+        }
+    }
+
+    if (!empty($jndPools)) {
+        $jndMain[] = ['type' => 'heading', 'label' => 'Pool Devices'];
+        uksort($jndPools, 'strnatcasecmp');
+
+        foreach ($jndPools as $pool => $poolData) {
+            $mountpoint = trim((string)($poolData['mountpoint'] ?? ''));
+            if ($mountpoint === '') $mountpoint = '/mnt/' . $pool;
+
+            $jndMain[] = [
+                'type' => 'item',
+                'label' => ucfirst($pool),
+                'href' => jnd_file_browser_href('Main', $mountpoint),
+                'icon' => jnd_folder_icon_descriptor(),
+                'indent' => 1,
+            ];
+        }
+    }
+
+    if (!empty($jndArray)) {
+        if (!empty($jndMain)) $jndMain[] = ['type' => 'separator'];
+        $jndMain[] = ['type' => 'heading', 'label' => 'Array Devices'];
+        foreach ($jndArray as $item) $jndMain[] = $item;
+    }
+
+    if ($jndBoot !== null) {
+        if (!empty($jndMain)) $jndMain[] = ['type' => 'separator'];
+        $jndMain[] = ['type' => 'heading', 'label' => 'Boot Device'];
+        $jndMain[] = $jndBoot;
+    }
+
+    $jndBootstrap['providers']['Main'] = $jndMain;
+
+    /* SHARES — navigate directly to the same File Manager destination as the stock folder icon. */
+    $jndShares = [];
+    if (isset($shares) && is_array($shares)) {
+        $shareNames = [];
+        foreach ($shares as $shareKey => $share) {
+            $name = is_array($share) ? (string)($share['name'] ?? $shareKey) : (string)$shareKey;
+            $name = trim($name);
+            if ($name !== '') $shareNames[$name] = true;
+        }
+
+        $shareNames = array_keys($shareNames);
+        natcasesort($shareNames);
+
+        foreach ($shareNames as $name) {
+            $jndShares[] = [
+                'type' => 'item',
+                'label' => $name,
+                'href' => jnd_file_browser_href('Shares', '/mnt/user/' . $name),
+                'icon' => jnd_folder_icon_descriptor(),
+            ];
+        }
+    }
+    $jndBootstrap['providers']['Shares'] = $jndShares;
+
+    /* USERS — navigation only; no Add User action. */
+    $jndUsers = [];
+    if (isset($users) && is_array($users)) {
+        $userNames = [];
+        foreach ($users as $userKey => $user) {
+            $name = is_array($user) ? (string)($user['name'] ?? $userKey) : (string)$userKey;
+            $name = trim($name);
+            if ($name !== '') $userNames[$name] = true;
+        }
+
+        $userNames = array_keys($userNames);
+        natcasesort($userNames);
+
+        if (in_array('root', $userNames, true)) {
+            $jndUsers[] = [
+                'type' => 'item',
+                'label' => 'root',
+                'href' => '/Users/UserEdit?name=root',
+                'icon' => jnd_user_image_descriptor('root'),
+            ];
+        }
+
+        foreach ($userNames as $name) {
+            if ($name === 'root') continue;
+            $jndUsers[] = [
+                'type' => 'item',
+                'label' => $name,
+                'href' => '/Users/UserEdit?name=' . rawurlencode($name),
+                'icon' => jnd_user_image_descriptor($name),
+            ];
+        }
+    }
+    $jndBootstrap['providers']['Users'] = $jndUsers;
+
+    /* SETTINGS / TOOLS — top-level menu parents are non-linking hover headers. */
+    $jndSettings = jnd_tree('Settings', '/Settings', 0, 1, false);
+    $jndTools = jnd_tree('Tools', '/Tools', 0, 1, false);
+    $jndBootstrap['providers']['Settings'] = $jndSettings;
+    $jndBootstrap['providers']['Tools'] = $jndTools;
+
+    /*
+     * PLUGINS
+     *
+     * The .plg package's optional "launch" metadata is not authoritative for
+     * navigation on this host. Installed plugins expose their actual WebGUI
+     * destinations through the live .page registry. Build an index of plugin-owned
+     * Settings/Tools pages, then resolve each installed plugin to that registry.
+     *
+     * Display name policy:
+     *   1. first Markdown heading/bold title from the same README rendered by the
+     *      stock /Plugins page;
+     *   2. matched WebGUI page Title;
+     *   3. plugin package name as a final fallback.
+     */
+    $jndPlugins = [];
+    try {
+        require_once "$docroot/plugins/dynamix.plugin.manager/include/PluginHelpers.php";
+
+        $jndPluginPageIndex = [];
+        jnd_collect_plugin_pages($jndSettings, $jndPluginPageIndex);
+        jnd_collect_plugin_pages($jndTools, $jndPluginPageIndex);
+
+        foreach (glob('/var/log/plugins/*.plg', GLOB_NOSORT) ?: [] as $pluginLink) {
+            $pluginFile = @readlink($pluginLink);
+            if ($pluginFile === false) continue;
+
+            $packageBase = basename($pluginFile, '.plg');
+            $name = function_exists('plugin')
+                ? (plugin('name', $pluginFile) ?: $packageBase)
+                : $packageBase;
+
+            if ($name === 'unRAIDServer') continue;
+
+            $identities = array_values(array_unique(array_filter([
+                $name,
+                $packageBase,
+                basename($pluginLink, '.plg'),
+            ])));
+
+            $page = jnd_find_plugin_page($identities, $jndPluginPageIndex);
+
+            $launch = function_exists('plugin') ? (plugin('launch', $pluginFile) ?: '') : '';
+            $fallbackLaunch = jnd_safe_internal_launch($launch);
+            if ($fallbackLaunch === '/null' || $fallbackLaunch === '/undefined') $fallbackLaunch = null;
+
+            $href = is_array($page) ? (string)($page['href'] ?? '') : '';
+            if ($href === '') $href = $fallbackLaunch;
+
+            $pageLabel = is_array($page) ? jnd_clean_label($page['label'] ?? '') : '';
+            $label = jnd_markdown_display_title($docroot, $identities, $pageLabel ?: $name);
+            if ($label === '') $label = jnd_clean_label($name, $packageBase);
+
+            $jndPlugins[] = [
+                'type' => 'item',
+                'label' => $label,
+                'href' => $href ?: null,
+                'icon' => jnd_plugin_icon_descriptor($docroot, $name, $pluginFile),
+            ];
+        }
+
+        usort($jndPlugins, static function($a, $b) {
+            return strnatcasecmp((string)$a['label'], (string)$b['label']);
+        });
+    } catch (Throwable $e) {
+        $jndPlugins = [];
+    }
+    $jndBootstrap['providers']['Plugins'] = $jndPlugins;
+
+    /* Dynamic providers are populated lazily. */
+    $jndBootstrap['providers']['Docker'] = [];
+    $jndBootstrap['providers']['VMs'] = [];
+
+    return $jndBootstrap;
+})();
+
+$jndJsonFlags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE |
+             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+?>
+<link rel="stylesheet" href="/plugins/nav.dropdown.menus/nav-dropdowns.css?v=<?=rawurlencode((string)$jndBootstrap['version'])?>">
+<script>
+window.JND_BOOTSTRAP = <?php echo json_encode($jndBootstrap, $jndJsonFlags); ?>;
+</script>
+<script defer src="/plugins/nav.dropdown.menus/nav-dropdowns.js?v=<?=rawurlencode((string)$jndBootstrap['version'])?>"></script>
