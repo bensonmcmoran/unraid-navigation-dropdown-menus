@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/security/advisories/new
+    about: Privately report a suspected security vulnerability.

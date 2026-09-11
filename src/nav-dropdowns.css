@@ -1,0 +1,403 @@
+/*
+ * Navigation Dropdown Menus
+ * Uses Dynamix semantic theme variables only.
+ */
+
+.jnd-loader {
+    display: none !important;
+}
+
+/* No visible caret/chevron is added to stock navigation. */
+#menu .nav-item > button.jnd-caret,
+#menu .nav-item > button.jnd-caret i {
+    display: none !important;
+}
+
+#jnd-overlay {
+    position: fixed;
+    display: none;
+    z-index: 10050;
+    min-width: 260px;
+    max-width: min(440px, calc(100vw - 16px));
+    box-sizing: border-box;
+    color: var(--text-color);
+    background: var(--background-color);
+    border: 1px solid var(--table-border-color);
+    border-top: 2px solid var(--brand-orange);
+    border-radius: 3px;
+    box-shadow: var(--small-shadow);
+    padding: 5px 0;
+    font-size: 1.3rem;
+    overflow: visible;
+}
+
+#jnd-overlay.jnd-visible {
+    display: block;
+}
+
+/* No scrollbar for normal menus. Nested flyouts must be allowed to escape. */
+#jnd-overlay .jnd-scroll {
+    overflow: visible;
+    max-height: none;
+}
+
+/* Plugins are the deliberate exception: a vertical scrollbar is acceptable. */
+#jnd-overlay.jnd-target-plugins .jnd-scroll {
+    max-height: min(72vh, 700px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--scrollbar-color) transparent;
+}
+
+#jnd-overlay a,
+#jnd-overlay a:visited {
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+#jnd-overlay .jnd-row,
+#jnd-overlay .jnd-heading,
+#jnd-overlay .jnd-static-row,
+#jnd-overlay .jnd-submenu-trigger {
+    position: relative;
+    box-sizing: border-box;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+#jnd-overlay .jnd-row > a,
+#jnd-overlay .jnd-heading > a,
+#jnd-overlay .jnd-heading > span,
+#jnd-overlay .jnd-static-row,
+#jnd-overlay .jnd-submenu-trigger {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 13px;
+}
+
+#jnd-overlay .jnd-row > a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+#jnd-overlay .jnd-row > a:hover,
+#jnd-overlay .jnd-row > a:focus-visible,
+#jnd-overlay .jnd-heading > a:hover,
+#jnd-overlay .jnd-heading > a:focus-visible,
+#jnd-overlay .jnd-submenu-wrap:hover > .jnd-submenu-trigger,
+#jnd-overlay .jnd-submenu-wrap:focus-within > .jnd-submenu-trigger {
+    background: var(--hover-table-row-background-color);
+    color: var(--link-text-color);
+    outline: none;
+}
+
+#jnd-overlay .jnd-heading {
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+#jnd-overlay .jnd-heading > a,
+#jnd-overlay .jnd-heading > span {
+    color: var(--text-color);
+}
+
+#jnd-overlay .jnd-indent-1 > a,
+#jnd-overlay .jnd-static-row.jnd-indent-1 {
+    padding-left: 29px;
+}
+
+#jnd-overlay .jnd-separator {
+    height: 1px;
+    margin: 5px 9px;
+    background: var(--table-border-color);
+    opacity: .8;
+}
+
+#jnd-overlay .jnd-static-row {
+    color: var(--text-color);
+    cursor: default;
+    gap: 9px;
+}
+
+#jnd-overlay .jnd-label {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#jnd-overlay .jnd-app-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    object-fit: contain;
+    font-size: 1.7rem;
+}
+
+#jnd-overlay .jnd-app-icon.jnd-user-avatar {
+    object-fit: cover;
+    border-radius: 2px;
+}
+
+#jnd-overlay .jnd-app-icon.PanelIcon,
+#jnd-overlay .jnd-app-icon.title {
+    font-size: 1.7rem;
+    line-height: 1;
+}
+
+#jnd-overlay .jnd-status-row {
+    box-sizing: border-box;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 9px;
+    padding: 8px 13px;
+}
+
+#jnd-overlay .jnd-status-row:hover,
+#jnd-overlay .jnd-status-row:focus-within {
+    background: var(--hover-table-row-background-color);
+}
+
+#jnd-overlay .jnd-status-row > a,
+#jnd-overlay .jnd-status-row > a:visited {
+    min-width: 0;
+    flex: 1 1 auto;
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+#jnd-overlay .jnd-status-row > a:hover,
+#jnd-overlay .jnd-status-row > a:focus-visible {
+    color: var(--link-text-color);
+    outline: none;
+}
+
+/*
+ * Preserve the compact v0.2.x icon/state/name geometry. Unraid's global
+ * button rules can impose a substantial minimum width, so the status button
+ * explicitly neutralizes that while remaining a separate accessible control.
+ */
+#jnd-overlay .jnd-status-control {
+    box-sizing: border-box;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px !important;
+    min-width: 0 !important;
+    max-width: 14px !important;
+    height: 20px;
+    min-height: 0 !important;
+    flex: 0 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0;
+    border-radius: 2px;
+    box-shadow: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    line-height: 1;
+    font: inherit;
+}
+
+#jnd-overlay .jnd-status-control:hover {
+    background: var(--mild-background-color);
+}
+
+#jnd-overlay .jnd-status-control:focus-visible {
+    outline: 1px solid var(--brand-orange);
+    outline-offset: 2px;
+}
+
+#jnd-overlay .jnd-status-control:disabled {
+    cursor: wait;
+    opacity: .8;
+}
+
+#jnd-overlay .jnd-status-static {
+    width: 14px;
+    height: 20px;
+    flex: 0 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#jnd-overlay .jnd-inline-control {
+    box-sizing: border-box;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px !important;
+    min-width: 0 !important;
+    max-width: 16px !important;
+    height: 20px;
+    min-height: 0 !important;
+    flex: 0 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0;
+    border-radius: 2px;
+    box-shadow: none;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    line-height: 1;
+    font: inherit;
+}
+
+#jnd-overlay .jnd-inline-control:hover {
+    background: var(--mild-background-color);
+    color: var(--link-text-color);
+}
+
+#jnd-overlay .jnd-inline-control:focus-visible {
+    outline: 1px solid var(--brand-orange);
+    outline-offset: 2px;
+}
+
+#jnd-overlay .jnd-inline-control i {
+    width: 14px;
+    flex: 0 0 14px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+#jnd-overlay .jnd-inline-placeholder {
+    box-sizing: border-box;
+    width: 16px;
+    min-width: 16px;
+    max-width: 16px;
+    height: 20px;
+    flex: 0 0 16px;
+    display: inline-block;
+    padding: 0;
+    margin: 0;
+}
+
+#jnd-overlay img.jnd-app-icon {
+    object-fit: contain;
+}
+
+#jnd-overlay .jnd-state-icon {
+    width: 14px;
+    flex: 0 0 14px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+#jnd-overlay .jnd-submenu-wrap {
+    position: relative;
+}
+
+#jnd-overlay .jnd-submenu-trigger {
+    gap: 9px;
+    cursor: default;
+    font-weight: 700;
+}
+
+#jnd-overlay .jnd-submenu-arrow {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--alt-text-color);
+}
+
+#jnd-overlay .jnd-submenu {
+    display: none;
+    position: absolute;
+    z-index: 10051;
+    top: -6px;
+    left: calc(100% - 2px);
+    min-width: 260px;
+    max-width: min(430px, calc(100vw - 16px));
+    box-sizing: border-box;
+    padding: 5px 0;
+    color: var(--text-color);
+    background: var(--background-color);
+    border: 1px solid var(--table-border-color);
+    border-top: 2px solid var(--brand-orange);
+    border-radius: 3px;
+    box-shadow: var(--small-shadow);
+    overflow: visible;
+}
+
+#jnd-overlay.jnd-flip-submenus .jnd-submenu {
+    left: auto;
+    right: calc(100% - 2px);
+}
+
+#jnd-overlay .jnd-submenu-wrap:hover > .jnd-submenu,
+#jnd-overlay .jnd-submenu-wrap:focus-within > .jnd-submenu {
+    display: block;
+}
+
+/* Categories use columns instead of scrollbars. */
+#jnd-overlay .jnd-submenu.jnd-grid-submenu {
+    min-width: 480px;
+    width: max-content;
+    max-width: min(760px, calc(100vw - 16px));
+    grid-template-columns: repeat(2, minmax(210px, 1fr));
+    gap: 0;
+}
+
+#jnd-overlay .jnd-submenu-wrap:hover > .jnd-grid-submenu,
+#jnd-overlay .jnd-submenu-wrap:focus-within > .jnd-grid-submenu {
+    display: grid;
+}
+
+#jnd-overlay .jnd-submenu.jnd-grid-submenu.jnd-grid-3 {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+#jnd-overlay .jnd-loading {
+    padding: 11px 13px;
+    color: var(--alt-text-color);
+    white-space: nowrap;
+}
+
+#jnd-overlay .jnd-loading i {
+    margin-right: 8px;
+}
+
+@media (max-width: 767px) {
+    #jnd-overlay {
+        min-width: min(320px, calc(100vw - 16px));
+    }
+
+    #jnd-overlay .jnd-submenu,
+    #jnd-overlay .jnd-submenu.jnd-grid-submenu,
+    #jnd-overlay .jnd-submenu.jnd-grid-submenu.jnd-grid-3 {
+        position: static;
+        display: none;
+        min-width: 0;
+        width: auto;
+        max-width: none;
+        grid-template-columns: 1fr;
+        margin: 0 7px 6px 18px;
+        border-top-width: 1px;
+        box-shadow: none;
+    }
+
+    #jnd-overlay .jnd-submenu-wrap.jnd-mobile-submenu-open > .jnd-submenu {
+        display: block;
+    }
+
+    #jnd-overlay .jnd-submenu-wrap.jnd-mobile-submenu-open > .jnd-grid-submenu {
+        display: grid;
+    }
+}

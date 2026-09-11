@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Plugin>
+  <Name>Navigation Dropdown Menus</Name>
+
+  <PluginURL>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg</PluginURL>
+
+  <Support>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues</Support>
+
+  <Project>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus</Project>
+
+  <Overview>Adds configurable dropdown menus to the Unraid WebGUI main navigation for Main, Shares, Users, Settings, Plugins, Docker, VMs, and Tools, with native icons, sorting and hover controls, Docker and VM status/actions, and log, WebUI, and VNC shortcuts.</Overview>
+
+  <Category>Tools:System</Category>
+
+  <Icon>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.png</Icon>
+
+  <MinVer>7.3.2</MinVer>
+
+  <ReadMe>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/README.md</ReadMe>
+
+  <License>MIT</License>
+
+  <DonateLink>https://github.com/sponsors/bensonmcmoran</DonateLink>
+  <DonateText>Sponsor this project</DonateText>
+</Plugin>
