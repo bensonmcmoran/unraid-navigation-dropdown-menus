@@ -96,7 +96,7 @@ This plugin was developed with AI-assisted coding and testing. Final functionali
 
 ## Author
 
-**Benson McMoran**
+**Furious Rage**
 
 ## License
 

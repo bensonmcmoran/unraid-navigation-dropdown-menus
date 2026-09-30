@@ -1,7 +1,7 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
 <!ENTITY name "nav.dropdown.menus">
-<!ENTITY author "Furious">
+<!ENTITY author "Furious Rage">
 <!ENTITY version "1.0.0">
 <!ENTITY launch "Settings/NavDropdownMenusSettings">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg">
