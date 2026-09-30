@@ -5,6 +5,8 @@
 
   <PluginURL>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg</PluginURL>
 
+  <PluginAuthor>Furious Rage</PluginAuthor>
+
   <Support>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues</Support>
 
   <Project>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus</Project>
@@ -20,6 +22,12 @@
   <ReadMe>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/README.md</ReadMe>
 
   <License>MIT</License>
+
+  <Screenshot>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot1.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot2.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot3.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot4.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot5.png</Screenshot>
 
   <DonateLink>https://github.com/sponsors/bensonmcmoran</DonateLink>
   <DonateText>Sponsor this project</DonateText>

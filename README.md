@@ -18,6 +18,20 @@ Navigation Dropdown Menus adds configurable dropdown menus to the Unraid WebGUI 
 - Follows the active Dynamix color theme automatically.
 - Does not replace or modify stock Unraid WebGUI files.
 
+## Screenshots
+
+Real Unraid WebGUI captures showing the plugin across dropdowns, nested settings, VM and Docker controls, and the plugin configuration page.
+
+![Main, Plugins, and Tools dropdowns](screenshots/screenshot1.png)
+
+![Shares and Docker dropdowns](screenshots/screenshot2.png)
+
+![Settings submenu and VMs dropdown](screenshots/screenshot3.png)
+
+![Users dropdown](screenshots/screenshot4.png)
+
+![Navigation Dropdown Menus settings page](screenshots/screenshot5.png)
+
 ## Requirements
 
 - Unraid OS 7.3.2 or later

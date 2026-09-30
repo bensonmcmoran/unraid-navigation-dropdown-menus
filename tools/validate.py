@@ -63,10 +63,16 @@ def validate():
     metadata(text)
     w=ET.parse(ROOT/"plugins/nav.dropdown.menus.xml").getroot()
     need(w.findtext("PluginURL")==PLUGIN_URL,"wrapper PluginURL")
+    need(w.findtext("PluginAuthor")=="Furious Rage","wrapper PluginAuthor")
     need(w.findtext("Support")==SUPPORT_URL,"wrapper Support")
     need(w.findtext("Project")==PROJECT_URL,"wrapper Project")
     need(w.findtext("MinVer")==MINVER,"wrapper MinVer")
     need(w.findtext("License")=="MIT","wrapper License")
+    screenshots=[node.text for node in w.findall("Screenshot")]
+    expected_screenshots=[f"https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/screenshots/screenshot{i}.png" for i in range(1,6)]
+    need(screenshots==expected_screenshots,"wrapper screenshots")
+    for i in range(1,6):
+        need((ROOT/f"screenshots/screenshot{i}.png").is_file(),f"screenshot{i}.png missing")
     p=ET.parse(ROOT/"ca_profile.xml").getroot()
     need(p.findtext("Forum")==SUPPORT_URL,"profile Support")
     need(p.findtext("WebPage")==PROJECT_URL,"profile WebPage")
