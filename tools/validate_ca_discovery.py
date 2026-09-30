@@ -6,10 +6,9 @@ SUP="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues"
 PROJ="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus"
 def need(x,m):
     if not x: raise AssertionError(m)
-ca=ET.parse(R/"nav.dropdown.menus.xml").getroot()
-need(ca.tag=="Containers","root")
-need(ca.findtext("Plugin")=="True","plugin marker")
-need(ca.findtext("Beta")=="False","beta marker")
+ca=ET.parse(R/"plugins/nav.dropdown.menus.xml").getroot()
+need(ca.tag=="Plugin","root")
+need(not (R/"nav.dropdown.menus.xml").exists(),"legacy root plugin metadata")
 need(ca.findtext("PluginURL")==URL,"plugin URL")
 need(ca.findtext("PluginAuthor")=="Furious Rage","author")
 need(ca.findtext("Support")==SUP,"support")
