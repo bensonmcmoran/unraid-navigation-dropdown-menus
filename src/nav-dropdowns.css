@@ -35,17 +35,16 @@
     display: block;
 }
 
-/* No scrollbar for normal menus. Nested flyouts must be allowed to escape. */
+/* Menus size to content until the viewport limit is reached. */
 #jnd-overlay .jnd-scroll {
     overflow: visible;
     max-height: none;
 }
 
-/* Plugins are the deliberate exception: a vertical scrollbar is acceptable. */
-#jnd-overlay.jnd-target-plugins .jnd-scroll {
-    max-height: min(72vh, 700px);
+/* Applied only when content would cross the viewport's bottom clearance. */
+#jnd-overlay .jnd-scroll.jnd-scroll-constrained {
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: scroll;
     overscroll-behavior: contain;
     scrollbar-color: var(--scrollbar-color) transparent;
 }
@@ -362,6 +361,24 @@
 
 #jnd-overlay .jnd-submenu.jnd-grid-submenu.jnd-grid-3 {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+/*
+ * A scroll container clips positioned descendants. When viewport height forces
+ * top-level scrolling, keep nested menus inside that scrollable region so they
+ * remain reachable instead of being clipped at the scroll container boundary.
+ */
+#jnd-overlay .jnd-scroll.jnd-scroll-constrained .jnd-submenu,
+#jnd-overlay .jnd-scroll.jnd-scroll-constrained .jnd-submenu.jnd-grid-submenu,
+#jnd-overlay .jnd-scroll.jnd-scroll-constrained .jnd-submenu.jnd-grid-submenu.jnd-grid-3 {
+    position: static;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    grid-template-columns: 1fr;
+    margin: 0 7px 6px 18px;
+    border-top-width: 1px;
+    box-shadow: none;
 }
 
 #jnd-overlay .jnd-loading {

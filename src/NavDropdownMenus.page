@@ -513,7 +513,7 @@ $jndBootstrap = (static function () {
 
     $jndBootstrap = [
         'schema' => 3,
-        'version' => '1.0.0',
+        'version' => '1.0.1',
         'unraidVersion' => (string)($var['version'] ?? ''),
         'providers' => [],
         'dropdowns' => [

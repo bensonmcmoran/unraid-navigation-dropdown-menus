@@ -2,8 +2,8 @@ from pathlib import Path
 import re, sys, xml.etree.ElementTree as ET
 R=Path(".")
 URL="https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg"
-SUP="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues"
 PROJ="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus"
+SUP="https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/"
 def need(x,m):
     if not x: raise AssertionError(m)
 ca=ET.parse(R/"plugins/nav.dropdown.menus.xml").getroot()

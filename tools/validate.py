@@ -4,17 +4,17 @@ import argparse, base64, re, shutil, subprocess, sys, tempfile
 import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION="1.0.0"
+VERSION="1.0.1"
 MINVER="7.3.2"
 PLUGIN_URL="https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg"
-SUPPORT_URL="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues"
+SUPPORT_URL="https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/"
 PROJECT_URL="https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus"
 class VError(RuntimeError): pass
 def need(v,m):
     if not v: raise VError(m)
-def run(cmd):
+def run(cmd,allow_failure=False):
     r=subprocess.run(cmd,text=True,capture_output=True)
-    if r.returncode: raise VError("command failed: "+" ".join(cmd)+"\n"+r.stdout+r.stderr)
+    if r.returncode and not allow_failure: raise VError("command failed: "+" ".join(cmd)+"\n"+r.stdout+r.stderr)
     return r
 def payload(text,name):
     m=re.search(r'<FILE Name="&runtime;/'+re.escape(name)+r'"[^>]*>\s*<INLINE><!\[CDATA\[(.*?)\]\]></INLINE>\s*</FILE>',text,re.S)
@@ -74,7 +74,7 @@ def validate():
     for i in range(1,6):
         need((ROOT/f"screenshots/screenshot{i}.png").is_file(),f"screenshot{i}.png missing")
     p=ET.parse(ROOT/"ca_profile.xml").getroot()
-    need(p.findtext("Forum")==SUPPORT_URL,"profile Support")
+    need(p.findtext("Forum")==SUPPORT_URL,"profile Forum")
     need(p.findtext("WebPage")==PROJECT_URL,"profile WebPage")
     m=re.search(r'<FILE Name="/tmp/nav\.dropdown\.menus\.icon\.b64"[^>]*>\s*<INLINE><!\[CDATA\[(.*?)\]\]></INLINE>',text,re.S)
     need(m is not None,"embedded icon missing")
@@ -102,7 +102,15 @@ def validate():
 $src=file_get_contents($argv[1]);$parts=explode("---\\n",$src,2);$tokens=token_get_all("<?php\\n".$parts[1]);$depth=0;$vars=[];
 foreach($tokens as $tok){if(is_string($tok)){if($tok==='{')$depth++;elseif($tok==='}')$depth--;}elseif($tok[0]===T_VARIABLE&&$depth===0){$vars[$tok[1]]=true;}}
 ksort($vars);echo implode(",",array_keys($vars));?>""")
-        got=run([php,str(d),str(ROOT/"src/NavDropdownMenus.page")]).stdout.strip();need(got=="$jndBootstrap,$jndJsonFlags","top-level vars: "+got)
+        if run([php,"-r",'exit(function_exists("token_get_all")?0:1);'],allow_failure=True).returncode==0:
+            got=run([php,str(d),str(ROOT/"src/NavDropdownMenus.page")]).stdout.strip()
+        else:
+            s=(ROOT/"src/NavDropdownMenus.page").read_text();body=s.split("---\n",1)[1];depth=0;top_vars=set()
+            for line in body.splitlines():
+                if depth==0:top_vars.update(re.findall(r'\$[A-Za-z_][A-Za-z0-9_]*',line))
+                depth+=line.count("{")-line.count("}")
+            got=",".join(sorted(top_vars))
+        need(got=="$jndBootstrap,$jndJsonFlags","top-level vars: "+got)
     run([node,"--check",str(ROOT/"src/nav-dropdowns.js")])
 def selftest():
     good="\n".join([f'<!ENTITY version "{VERSION}">',f'<!ENTITY pluginURL "{PLUGIN_URL}">',f'<!ENTITY supportURL "{SUPPORT_URL}">','<PLUGIN pluginURL="&pluginURL;" support="&supportURL;" min="7.3.2">'])

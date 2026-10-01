@@ -2,6 +2,16 @@
 
 All notable public changes to Navigation Dropdown Menus are documented here.
 
+## 1.0.1
+
+- Makes every top-level dropdown size to its content or the available viewport height, whichever is smaller.
+- Keeps approximately 1rem of clearance between a viewport-constrained dropdown and the bottom of the browser window.
+- Shows a vertical scrollbar only when additional top-level dropdown content exceeds the available viewport height.
+- Removes the Plugins-only 72vh/700px scroll-height exception so all dropdowns use the same viewport rule.
+- Keeps nested menus reachable when a top-level dropdown becomes viewport-constrained by rendering those nested menus inside the scrollable region.
+- Removes the redundant Navigation Dropdown Menus heading from the plugin settings page.
+- Adds the dedicated Unraid forum support thread to the plugin and Community Applications metadata while retaining GitHub Issues for bug reports and feature requests.
+
 ## 1.0.0
 
 Initial public release.
