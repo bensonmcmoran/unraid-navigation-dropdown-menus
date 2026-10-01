@@ -5,7 +5,7 @@
 (() => {
     'use strict';
 
-    const BUILD = '1.0.0';
+    const BUILD = '1.0.1';
     const BOOT = window.JND_BOOTSTRAP;
     const ALL_TARGETS = ['Main', 'Shares', 'Users', 'Settings', 'Plugins', 'Docker', 'VMs', 'Tools'];
     const TARGETS = ALL_TARGETS.filter(target => BOOT?.dropdowns?.[target] !== false);
@@ -769,13 +769,19 @@
     }
 
     function positionOverlay() {
-        if (!state.overlay || !state.activeNavItem) return;
+        if (!state.overlay || !state.activeNavItem || !state.scroll) return;
 
         const rect = state.activeNavItem.getBoundingClientRect();
         const overlay = state.overlay;
+        const scroll = state.scroll;
         const gap = 4;
         const margin = 8;
+        const rootRem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const bottomClearance = rootRem;
         const sidebar = document.documentElement.classList.contains('Theme--sidebar');
+
+        scroll.classList.remove('jnd-scroll-constrained');
+        scroll.style.maxHeight = '';
 
         overlay.style.left = '0px';
         overlay.style.top = '0px';
@@ -801,7 +807,7 @@
                 left = Math.max(margin, window.innerWidth - width - margin);
             }
 
-            if (top + height > window.innerHeight - margin &&
+            if (top + height > window.innerHeight - bottomClearance &&
                 rect.top - height - gap >= margin) {
                 top = rect.top - height - gap;
             }
@@ -812,6 +818,16 @@
 
         overlay.style.left = `${Math.round(left)}px`;
         overlay.style.top = `${Math.round(top)}px`;
+
+        const overlayChrome = Math.max(0, overlay.offsetHeight - scroll.offsetHeight);
+        const availableScrollHeight = Math.max(1, Math.floor(
+            window.innerHeight - top - bottomClearance - overlayChrome
+        ));
+
+        if (availableScrollHeight > 0 && scroll.scrollHeight > availableScrollHeight) {
+            scroll.style.maxHeight = `${availableScrollHeight}px`;
+            scroll.classList.add('jnd-scroll-constrained');
+        }
 
         const estimatedSubmenuWidth = 430;
         if (left + width + estimatedSubmenuWidth > window.innerWidth - margin) {

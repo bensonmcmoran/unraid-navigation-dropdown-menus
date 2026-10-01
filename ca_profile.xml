@@ -5,9 +5,9 @@
 
   <Icon>https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.png</Icon>
 
-  <WebPage>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus</WebPage>
+  <Forum>https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/</Forum>
 
-  <Forum>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues</Forum>
+  <WebPage>https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus</WebPage>
 
   <DonateLink>https://github.com/sponsors/bensonmcmoran</DonateLink>
   <DonateText>Sponsor this project</DonateText>
