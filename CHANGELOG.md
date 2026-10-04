@@ -2,6 +2,21 @@
 
 All notable public changes to Navigation Dropdown Menus are documented here.
 
+## 1.0.2 - 2026-10-04
+
+### Improved
+
+- Makes Docker, VM, and Unassigned Devices dropdowns reopen faster by reusing session data while stale information refreshes in the background.
+- Keeps Docker and VM state changes synchronized between Navigation Dropdown Menus, Unraid's native Docker/VM pages, and other open browser tabs.
+- Keeps Docker and VM transition feedback stable until the requested lifecycle change reaches its expected state.
+
+### Fixed
+
+- Prevents older Docker or VM observations from overwriting newer state after start/stop actions.
+- Prevents VM start transitions from briefly showing the paused icon while the VM is still transitioning.
+- Eliminates visible wobble from Docker and VM transition spinners while retaining Unraid's native Font Awesome refresh/spin appearance.
+- Corrects the plugin version shown by the install-completion banner.
+
 ## 1.0.1
 
 - Makes every top-level dropdown size to its content or the available viewport height, whichever is smaller.
