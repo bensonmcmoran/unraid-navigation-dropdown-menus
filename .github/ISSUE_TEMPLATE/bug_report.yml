@@ -16,7 +16,7 @@ body:
     attributes:
       label: Navigation Dropdown Menus version
       description: Enter the installed plugin version.
-      placeholder: "1.0.0"
+      placeholder: "e.g. 1.0.2"
     validations:
       required: true
 

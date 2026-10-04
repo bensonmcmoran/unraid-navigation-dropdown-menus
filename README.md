@@ -84,7 +84,9 @@ If the dropdown interface ever interferes with navigation, it can be disabled te
 
 ## Support
 
-Support, bug reports, and feature requests are handled through the repository's [GitHub Issues](https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues) page.
+General support and usage questions are handled in the [official Unraid support thread](https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/).
+
+Reproducible bug reports and feature requests may be submitted through the repository's [GitHub Issues](https://github.com/bensonmcmoran/unraid-navigation-dropdown-menus/issues) page.
 
 Security vulnerabilities should not be reported publicly. Please use GitHub's private vulnerability reporting for this repository.
 

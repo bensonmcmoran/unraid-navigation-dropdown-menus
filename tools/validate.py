@@ -4,7 +4,7 @@ import argparse, base64, re, shutil, subprocess, sys, tempfile
 import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION="1.0.1"
+VERSION="1.0.2"
 MINVER="7.3.2"
 PLUGIN_URL="https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg"
 SUPPORT_URL="https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/"
@@ -57,6 +57,13 @@ def runtime(js,page,sp,provider,settings,css):
     need(".jnd-settings-section" in sp and "background: var(--mild-background-color);" in sp and "border-left: 3px solid var(--brand-orange);" in sp,"settings panels missing")
     need(".jnd-inline-placeholder" in css and ".jnd-user-avatar" in css,"CSS styling missing")
     need("fa fa-folder-o" in page and "fa fa-folder-o" in provider and "jnd_user_image_descriptor" in page,"menu icon support missing")
+    need("const SESSION_CACHE_SCHEMA = 3;" in js,"session cache schema mismatch")
+    need("const statusId = cleanText(item.statusId);" in js and "id !== statusId" in js,"cached identity consistency missing")
+    need("if (kind && id) return {kind, id};" in js,"observation transition identity missing")
+    need("NATIVE_LIFECYCLE_REFRESH_DELAY_MS = 500" in js,"native lifecycle refresh delay missing")
+    quick=re.search(r"async function performQuickAction\([\s\S]*?\n    function parseInertHtml",js)
+    need(quick is not None and "scheduleTransitionPolling(300)" not in quick.group(0),"pre-completion quick-action polling remains")
+    need("'statusId' => $containerId" in provider and "'statusId' => $uuid" in provider,"provider status identity missing")
 def validate():
     plg=ROOT/"nav.dropdown.menus.plg";text=plg.read_text(encoding="utf-8")
     for p in [plg,ROOT/"ca_profile.xml",ROOT/"plugins/nav.dropdown.menus.xml"]: ET.parse(p)

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "nav.dropdown.menus">
 <!ENTITY author "Furious Rage">
-<!ENTITY version "1.0.1">
+<!ENTITY version "1.0.2">
 <!ENTITY launch "Settings/NavDropdownMenusSettings">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/bensonmcmoran/unraid-navigation-dropdown-menus/main/nav.dropdown.menus.plg">
 <!ENTITY supportURL "https://forums.unraid.net/topic/200761-plugin-navigation-dropdown-menus/">
@@ -12,6 +12,19 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" min="7.3.2" icon="nav.dropdown.menus.png" pluginURL="&pluginURL;" support="&supportURL;">
 
 <CHANGES>
+### 1.0.2
+
+#### Improved
+- Makes Docker, VM, and Unassigned Devices dropdowns reopen faster by reusing session data while stale information refreshes in the background.
+- Keeps Docker and VM state changes synchronized between Navigation Dropdown Menus, Unraid's native Docker/VM pages, and other open browser tabs.
+- Keeps Docker and VM transition feedback stable until the requested lifecycle change reaches its expected state.
+
+#### Fixed
+- Prevents older Docker or VM observations from overwriting newer state after start/stop actions.
+- Prevents VM start transitions from briefly showing the paused icon while the VM is still transitioning.
+- Eliminates visible wobble from Docker and VM transition spinners while retaining Unraid's native Font Awesome refresh/spin appearance.
+- Corrects the plugin version shown by the install-completion banner.
+
 ### 1.0.1
 - Makes every top-level dropdown size to its content or the available viewport height, whichever is smaller.
 - Keeps approximately 1rem of clearance between a viewport-constrained dropdown and the bottom of the browser window.
@@ -554,7 +567,7 @@ $jndBootstrap = (static function () {
 
     $jndBootstrap = [
         'schema' => 3,
-        'version' => '1.0.1',
+        'version' => '1.0.2',
         'unraidVersion' => (string)($var['version'] ?? ''),
         'providers' => [],
         'dropdowns' => [
@@ -1231,6 +1244,14 @@ $sortMode = jnd_settings_choice($cfg, 'SORT_MODE', ['unraid', 'alphabetical'], '
             payload[control.dataset.jndSetting] = control.value;
         }
 
+        const csrf = typeof window.csrf_token === 'string' ? window.csrf_token : '';
+        if (!csrf) {
+            status.textContent = 'Save failed. Security token unavailable.';
+            setTimeout(syncApply, 0);
+            return;
+        }
+        payload.csrf_token = csrf;
+
         button.disabled = true;
         status.textContent = 'Saving...';
 
@@ -1462,6 +1483,7 @@ try {
                     'href' => $href,
                     'state' => $state,
                     'statusKind' => 'docker',
+                    'statusId' => $containerId,
                     'icon' => $icon,
                     'control' => $control,
                     'log' => [
@@ -1559,6 +1581,7 @@ try {
                     'href' => '/VMs/UpdateVM?uuid=' . rawurlencode($uuid),
                     'state' => $state,
                     'statusKind' => 'vm',
+                    'statusId' => $uuid,
                     'icon' => $icon,
                     'control' => $control,
                     'log' => $vmLog !== '' ? [
@@ -2022,6 +2045,7 @@ jnd_settings_json([
     font-size: 1.1rem;
 }
 
+
 #jnd-overlay .jnd-submenu-wrap {
     position: relative;
 }
@@ -2150,16 +2174,22 @@ jnd_settings_json([
 (() => {
     'use strict';
 
-    const BUILD = '1.0.1';
+    const BUILD = '1.0.2';
     const BOOT = window.JND_BOOTSTRAP;
     const ALL_TARGETS = ['Main', 'Shares', 'Users', 'Settings', 'Plugins', 'Docker', 'VMs', 'Tools'];
     const TARGETS = ALL_TARGETS.filter(target => BOOT?.dropdowns?.[target] !== false);
     const SORTABLE_TARGETS = new Set(['Shares', 'Users', 'Docker', 'VMs']);
     const STATIC_CACHE_MS = 60000;
-    const DYNAMIC_CACHE_MS = 12000;
+    const DYNAMIC_CACHE_MS = 15000;
+    const SESSION_CACHE_SCHEMA = 3;
+    const SESSION_CACHE_PREFIX = 'jnd-provider-cache';
+    const SESSION_CACHE_TARGETS = new Set(['Docker', 'VMs', 'ud_remotes']);
+    const SYNC_CHANNEL_SCHEMA = 1;
+    const SYNC_CHANNEL_NAME = 'jnd-nav-sync-v1';
     const REQUEST_TIMEOUT_MS = 6000;
     const ACTION_TIMEOUT_MS = 30000;
     const TRANSITION_POLL_MS = 850;
+    const NATIVE_LIFECYCLE_REFRESH_DELAY_MS = 500;
     const TRANSITION_TIMEOUT_MS = 60000;
     const ALLOWED_HOVER_OPEN_MS = new Set([75, 100, 150, 200]);
     const configuredHoverOpenMs = Number(BOOT?.preferences?.hoverOpenMs);
@@ -2195,6 +2225,9 @@ jnd_settings_json([
         openTimer: null,
         closeTimer: null,
         cache: new Map(),
+        inFlight: new Map(),
+        providerEpoch: new Map(),
+        warmQueueStarted: false,
         udItems: [],
         udLoaded: false,
         udCacheTime: 0,
@@ -2202,6 +2235,8 @@ jnd_settings_json([
         transitions: new Map(),
         transitionTimer: null,
         transitionPollInFlight: false,
+        syncChannel: null,
+        syncSource: '',
         attached: false,
     };
 
@@ -2273,7 +2308,6 @@ jnd_settings_json([
 
         const overlay = document.createElement('div');
         overlay.id = 'jnd-overlay';
-        overlay.setAttribute('role', 'menu');
         overlay.setAttribute('aria-label', 'Navigation submenu');
 
         const scroll = document.createElement('div');
@@ -2433,7 +2467,9 @@ jnd_settings_json([
             target,
             kind: cleanText(control.kind).toLowerCase(),
             id: cleanText(control.id),
+            action: cleanText(control.action),
             expectedState: cleanText(expectedState).toLowerCase(),
+            actionComplete: false,
             startedAt: now,
             expiresAt: now + TRANSITION_TIMEOUT_MS,
         };
@@ -2445,6 +2481,118 @@ jnd_settings_json([
     function clearTransition(control) {
         const key = controlKey(control);
         if (key) state.transitions.delete(key);
+    }
+
+    function markTransitionActionComplete(control) {
+        const key = controlKey(control);
+        if (!key) return null;
+        const transition = state.transitions.get(key) || null;
+        if (transition) transition.actionComplete = true;
+        return transition;
+    }
+
+    function expectedStateForControl(control) {
+        const kind = cleanText(control?.kind).toLowerCase();
+        const action = cleanText(control?.action);
+        if (kind === 'docker' && action === 'start') return 'started';
+        if (kind === 'docker' && action === 'stop') return 'stopped';
+        if (kind === 'vm' && action === 'domain-start') return 'started';
+        if (kind === 'vm' && action === 'domain-stop') return 'stopped';
+        return '';
+    }
+
+    function validSyncControl(target, control, expectedState) {
+        if (!['Docker', 'VMs'].includes(target) || !control || typeof control !== 'object') return null;
+        const kind = cleanText(control.kind).toLowerCase();
+        const id = cleanText(control.id);
+        const action = cleanText(control.action);
+        if (!id || id.length > 256) return null;
+        if (target === 'Docker' && kind !== 'docker') return null;
+        if (target === 'VMs' && kind !== 'vm') return null;
+        const normalized = {kind, id, action};
+        const expected = expectedStateForControl(normalized);
+        if (!expected || expected !== cleanText(expectedState).toLowerCase()) return null;
+        return normalized;
+    }
+
+    function publishSync(phase, target, control, expectedState) {
+        if (!state.syncChannel || !['begin', 'refresh', 'cancel'].includes(phase)) return;
+        const normalized = validSyncControl(target, control, expectedState);
+        if (!normalized) return;
+        try {
+            state.syncChannel.postMessage({
+                schema: SYNC_CHANNEL_SCHEMA,
+                source: state.syncSource,
+                phase,
+                target,
+                control: normalized,
+                expectedState: cleanText(expectedState).toLowerCase(),
+                time: Date.now(),
+            });
+        } catch (_) {}
+    }
+
+    function renderTransitionSnapshot(target, items) {
+        if (state.activeTarget !== target || !Array.isArray(items)) return;
+        renderMenu(items);
+        requestAnimationFrame(positionOverlay);
+        if (hasTransitionsFor(target)) scheduleTransitionPolling(300);
+    }
+
+    function refreshOpenProvider(target, warningLabel) {
+        if (state.activeTarget !== target) return;
+        void getProviderItems(target, {forceFresh: true})
+            .then(items => {
+                if (state.activeTarget !== target) return;
+                renderMenu(items);
+                requestAnimationFrame(positionOverlay);
+                if (hasTransitionsFor(target)) scheduleTransitionPolling();
+            })
+            .catch(error => console.warn('[JND] ' + target + ' ' + warningLabel + ' refresh failed:', error));
+    }
+
+    function handleSyncMessage(event) {
+        const msg = event?.data;
+        if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
+        if (msg.schema !== SYNC_CHANNEL_SCHEMA || msg.source === state.syncSource) return;
+        if (!['begin', 'refresh', 'cancel'].includes(msg.phase)) return;
+        const time = Number(msg.time);
+        if (!Number.isFinite(time) || time <= 0 || time > Date.now() + 5000 || Date.now() - time > TRANSITION_TIMEOUT_MS) return;
+        const control = validSyncControl(msg.target, msg.control, msg.expectedState);
+        if (!control) return;
+
+        const snapshot = state.activeTarget === msg.target ? cachePeek(msg.target)?.items : null;
+
+        if (msg.phase === 'begin') {
+            beginTransition(msg.target, control, msg.expectedState);
+            invalidateProviderObservation(msg.target);
+            renderTransitionSnapshot(msg.target, snapshot);
+            return;
+        }
+
+        if (msg.phase === 'cancel') {
+            clearTransition(control);
+            invalidateProviderObservation(msg.target);
+            refreshOpenProvider(msg.target, 'cross-tab cancel');
+            return;
+        }
+
+        markTransitionActionComplete(control);
+        invalidateProviderObservation(msg.target);
+        refreshStockPage(msg.target);
+        refreshOpenProvider(msg.target, 'cross-tab');
+    }
+
+    function attachCrossTabSync() {
+        if (typeof window.BroadcastChannel !== 'function' || state.syncChannel) return;
+        try {
+            state.syncSource = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+            state.syncChannel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+            state.syncChannel.addEventListener('message', handleSyncMessage);
+        } catch (_) {
+            state.syncChannel = null;
+            state.syncSource = '';
+        }
     }
 
     function hasTransitionsFor(target) {
@@ -2462,7 +2610,7 @@ jnd_settings_json([
 
         for (const item of items || []) {
             if (!item || typeof item !== 'object') continue;
-            if (controlKey(item.control) === key) return item;
+            if (controlKey(itemTransitionIdentity(item)) === key) return item;
 
             if (Array.isArray(item.children)) {
                 const child = findControlItem(item.children, control);
@@ -2483,17 +2631,39 @@ jnd_settings_json([
             if (!item) continue;
 
             const currentState = cleanText(item.state).toLowerCase();
-            if (currentState === transition.expectedState) {
+            if (transition.actionComplete === true && currentState === transition.expectedState) {
                 state.transitions.delete(key);
             }
         }
     }
 
-    function createTransitionSpinner() {
+    function transitionColorClass(transition, itemState = '') {
+        const action = cleanText(transition?.action);
+        if (action === 'start' || action === 'domain-start') return 'red-text';
+        if (action === 'stop' || action === 'domain-stop') return 'green-text';
+        const stateName = cleanText(itemState).toLowerCase();
+        if (stateName === 'started' || stateName === 'running') return 'green-text';
+        if (stateName === 'paused') return 'orange-text';
+        return 'red-text';
+    }
+
+    function createTransitionSpinner(transition, itemState = '') {
         const spinner = document.createElement('i');
-        spinner.className = 'fa fa-refresh fa-spin jnd-state-icon';
+        spinner.className = 'fa fa-refresh fa-spin ' + transitionColorClass(transition, itemState);
         spinner.setAttribute('aria-hidden', 'true');
         return spinner;
+    }
+
+    function createTransitionIndicator(transition, item) {
+        const wrapper = document.createElement('span');
+        const spinner = createTransitionSpinner(transition, item?.state);
+        const label = 'Transitioning: ' + cleanText(item?.label);
+        wrapper.setAttribute('role', 'status');
+        wrapper.setAttribute('aria-label', label);
+        wrapper.setAttribute('aria-busy', 'true');
+        wrapper.title = label;
+        wrapper.appendChild(spinner);
+        return wrapper;
     }
 
     function stopTransitionPolling() {
@@ -2546,6 +2716,14 @@ jnd_settings_json([
     function statusKind(item) {
         const value = cleanText(item?.statusKind || item?.control?.kind).toLowerCase();
         return value === 'docker' || value === 'vm' ? value : '';
+    }
+
+    function itemTransitionIdentity(item) {
+        const kind = statusKind(item);
+        const id = cleanText(item?.statusId);
+        if (kind && id) return {kind, id};
+        const control = item?.control;
+        return control && typeof control === 'object' ? control : null;
     }
 
     function statusIndicatorsEnabled(item) {
@@ -2661,7 +2839,8 @@ jnd_settings_json([
         button.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            window.open(href, '_blank', 'scrollbars=yes,resizable=yes');
+            const popup = window.open(href, '_blank', 'scrollbars=yes,resizable=yes,noopener');
+            if (popup) popup.opener = null;
         });
 
         return button;
@@ -2701,17 +2880,9 @@ jnd_settings_json([
             ? BOOT.features?.quickActions?.docker === true
             : (kind === 'vm' ? BOOT.features?.quickActions?.vms === true : false);
 
-        const transition = getTransition(control);
+        const transition = getTransition(itemTransitionIdentity(item));
         if (transition) {
-            const busy = document.createElement('button');
-            busy.type = 'button';
-            busy.className = 'jnd-status-control';
-            busy.disabled = true;
-            busy.title = `Transitioning: ${cleanText(item.label)}`;
-            busy.setAttribute('aria-label', busy.title);
-            busy.setAttribute('aria-busy', 'true');
-            busy.appendChild(createTransitionSpinner());
-            return busy;
+            return createTransitionIndicator(transition, item);
         }
 
         if (!quickEnabled || !control || typeof control !== 'object') {
@@ -2776,7 +2947,6 @@ jnd_settings_json([
         if (href) {
             const a = document.createElement('a');
             a.href = href;
-            a.setAttribute('role', 'menuitem');
             a.appendChild(createLabel(item));
             row.appendChild(a);
         } else {
@@ -2792,7 +2962,6 @@ jnd_settings_json([
 
         const a = document.createElement('a');
         a.href = href;
-        a.setAttribute('role', 'menuitem');
         appendRowContents(a, item);
         return a;
     }
@@ -2842,8 +3011,7 @@ jnd_settings_json([
                 } else {
                     trigger = document.createElement('div');
                     trigger.tabIndex = 0;
-                    trigger.setAttribute('role', 'menuitem');
-                    trigger.setAttribute('aria-haspopup', 'menu');
+                    trigger.setAttribute('aria-haspopup', 'true');
                 }
 
                 trigger.className = 'jnd-submenu-trigger';
@@ -2858,7 +3026,6 @@ jnd_settings_json([
 
                 const sub = document.createElement('div');
                 sub.className = 'jnd-submenu';
-                sub.setAttribute('role', 'menu');
 
                 if (item.layout === 'grid') {
                     sub.classList.add('jnd-grid-submenu');
@@ -3052,8 +3219,7 @@ jnd_settings_json([
 
         let items;
         try {
-            const forceFresh = target === 'Docker' || target === 'VMs';
-            items = await getProviderItems(target, {forceFresh});
+            items = await getProviderItems(target);
         } catch (error) {
             console.warn(`[JND] ${target} provider failed:`, error);
             items = [{type: 'item', label: 'Dropdown data unavailable', href: null}];
@@ -3070,7 +3236,7 @@ jnd_settings_json([
         requestAnimationFrame(() => {
             positionOverlay();
             if (focusFirst) {
-                state.overlay.querySelector('a[role="menuitem"], .jnd-submenu-trigger[tabindex="0"]')?.focus();
+                state.overlay.querySelector('a[href], button:not([disabled]), .jnd-submenu-trigger[tabindex="0"]')?.focus();
             }
         });
     }
@@ -3087,7 +3253,7 @@ jnd_settings_json([
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
 
         const focusable = Array.from(
-            state.overlay.querySelectorAll('a[role="menuitem"], .jnd-submenu-trigger[tabindex="0"]')
+            state.overlay.querySelectorAll('a[href], button:not([disabled]), .jnd-submenu-trigger[tabindex="0"]')
         ).filter(el => el.offsetParent !== null);
 
         if (!focusable.length) return;
@@ -3098,21 +3264,160 @@ jnd_settings_json([
         focusable[(current + delta + focusable.length) % focusable.length].focus();
     }
 
-    function cacheGet(key, maxAge) {
-        const hit = state.cache.get(key);
-        if (!hit) return null;
+    function sessionCacheKey(key) {
+        const server = cleanText(window.location.host).toLowerCase();
+        const unraid = cleanText(BOOT.unraidVersion) || 'unknown';
+        return `${SESSION_CACHE_PREFIX}:${SESSION_CACHE_SCHEMA}:${server}:${unraid}:${BUILD}:${key}`;
+    }
 
-        if (Date.now() - hit.time > maxAge) {
-            state.cache.delete(key);
+    function validCachedItems(items) {
+        if (!Array.isArray(items) || items.length > 1000) return false;
+
+        return items.every(item => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+            if (cleanText(item.type || 'item') !== 'item') return false;
+
+            const label = cleanText(item.label);
+            if (!label || label.length > 512) return false;
+
+            if (item.href !== null && item.href !== undefined && !sameOriginPath(item.href)) return false;
+            if (item.indent !== undefined && ![0, 1].includes(Number(item.indent))) return false;
+
+            if (item.icon !== null && item.icon !== undefined) {
+                const icon = item.icon;
+                if (!icon || typeof icon !== 'object' || Array.isArray(icon)) return false;
+
+                if (icon.kind === 'img') {
+                    if (!sameOriginPath(icon.src)) return false;
+                    if (icon.fallback !== undefined && icon.fallback !== null && !sameOriginPath(icon.fallback)) return false;
+                    if (icon.variant !== undefined && !['', 'avatar'].includes(cleanText(icon.variant))) return false;
+                } else if (icon.kind === 'class') {
+                    const classes = cleanText(icon.className).split(' ').filter(Boolean);
+                    if (!classes.length || classes.length > 8) return false;
+                    if (!classes.every(c => /^(?:fa|fa-[A-Za-z0-9_-]+|icon-[A-Za-z0-9_-]+|PanelIcon|PanelImg|title)$/.test(c))) return false;
+                } else {
+                    return false;
+                }
+            }
+
+            const status = cleanText(item.statusKind).toLowerCase();
+            const stateName = cleanText(item.state).toLowerCase();
+            const statusId = cleanText(item.statusId);
+            if (status) {
+                if (!['docker', 'vm'].includes(status)) return false;
+                if (!['started', 'stopped', 'paused'].includes(stateName)) return false;
+                if (!statusId || statusId.length > 512) return false;
+            } else if (stateName || statusId) {
+                return false;
+            }
+
+            const control = item.control;
+            if (control !== null && control !== undefined) {
+                if (!control || typeof control !== 'object' || Array.isArray(control)) return false;
+                const kind = cleanText(control.kind).toLowerCase();
+                const action = cleanText(control.action);
+                const id = cleanText(control.id);
+                if (!id || id.length > 256 || kind !== status || id !== statusId || stateName === 'paused') return false;
+                if (kind === 'docker' && action !== (stateName === 'started' ? 'stop' : 'start')) return false;
+                if (kind === 'vm' && action !== (stateName === 'started' ? 'domain-stop' : 'domain-start')) return false;
+            }
+
+            if (item.webui !== null && item.webui !== undefined && !safeWebUrl(item.webui)) return false;
+            if (item.vncConsole !== null && item.vncConsole !== undefined && !safeSameOriginUrl(item.vncConsole)) return false;
+
+            if (item.log !== null && item.log !== undefined) {
+                const log = item.log;
+                if (!log || typeof log !== 'object' || Array.isArray(log)) return false;
+                if (cleanText(log.kind).toLowerCase() !== status) return false;
+                if (!cleanText(log.name) || cleanText(log.name).length > 512) return false;
+                if (!String(log.more ?? '') || String(log.more).length > 1024) return false;
+            }
+
+            return true;
+        });
+    }
+
+    function sessionCacheRead(key) {
+        if (!SESSION_CACHE_TARGETS.has(key)) return null;
+
+        try {
+            const raw = sessionStorage.getItem(sessionCacheKey(key));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const time = Number(parsed?.time);
+
+            if (
+                parsed?.schema !== SESSION_CACHE_SCHEMA ||
+                !Number.isFinite(time) ||
+                time <= 0 ||
+                time > Date.now() + 60000 ||
+                !validCachedItems(parsed?.items)
+            ) {
+                sessionStorage.removeItem(sessionCacheKey(key));
+                return null;
+            }
+
+            return {time, items: cloneData(parsed.items)};
+        } catch (_) {
             return null;
         }
+    }
 
+    function sessionCacheWrite(key, entry) {
+        if (!SESSION_CACHE_TARGETS.has(key)) return;
+
+        try {
+            sessionStorage.setItem(sessionCacheKey(key), JSON.stringify({
+                schema: SESSION_CACHE_SCHEMA,
+                time: entry.time,
+                items: entry.items,
+            }));
+        } catch (_) {
+            // Browser persistence is an optimization only; memory caching remains available.
+        }
+    }
+
+    function cachePeek(key) {
+        let hit = state.cache.get(key);
+        if (!hit) {
+            hit = sessionCacheRead(key);
+            if (hit) state.cache.set(key, hit);
+        }
+        return hit ? {time: hit.time, items: cloneData(hit.items)} : null;
+    }
+
+    function cacheGet(key, maxAge) {
+        const hit = cachePeek(key);
+        if (!hit || Date.now() - hit.time > maxAge) return null;
         return cloneData(hit.items);
     }
 
     function cachePut(key, items) {
-        state.cache.set(key, {time: Date.now(), items: cloneData(items)});
+        const entry = {time: Date.now(), items: cloneData(items)};
+        state.cache.set(key, entry);
+        sessionCacheWrite(key, entry);
         return items;
+    }
+
+    function providerEpoch(key) {
+        return state.providerEpoch.get(key) || 0;
+    }
+
+    function invalidateProviderObservation(key) {
+        state.providerEpoch.set(key, providerEpoch(key) + 1);
+        cacheInvalidate(key, {bumpEpoch: false});
+    }
+
+    function cacheInvalidate(key, options = {}) {
+        if (options?.bumpEpoch !== false && ['Docker', 'VMs'].includes(key)) {
+            state.providerEpoch.set(key, providerEpoch(key) + 1);
+        }
+
+        state.cache.delete(key);
+        if (!SESSION_CACHE_TARGETS.has(key)) return;
+        try {
+            sessionStorage.removeItem(sessionCacheKey(key));
+        } catch (_) {}
     }
 
     function jqAjax(options) {
@@ -3165,6 +3470,19 @@ jnd_settings_json([
         return window.confirm(`Stop ${subject} "${label}"?`);
     }
 
+    function refreshStockPage(target) {
+        const pagePath = window.location.pathname.replace(/\/+$/, '') || '/';
+        const matchingPage =
+            (target === 'Docker' && pagePath === '/Docker') ||
+            (target === 'VMs' && pagePath === '/VMs');
+        if (!matchingPage || typeof window.loadlist !== 'function') return;
+        try {
+            window.loadlist();
+        } catch (error) {
+            console.warn('[JND] ' + target + ' stock page refresh failed:', error);
+        }
+    }
+
     async function performQuickAction(item, button) {
         const control = item?.control;
         const enabled = control?.kind === 'docker'
@@ -3193,15 +3511,17 @@ jnd_settings_json([
 
         if (!confirmStopAction(item, control)) return;
 
-        beginTransition(target, control, expectedState);
-
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-        button.replaceChildren(createTransitionSpinner());
-
-        if (state.activeTarget === target) {
-            scheduleTransitionPolling(300);
+        const csrf = typeof window.csrf_token === 'string' ? window.csrf_token : '';
+        if (!csrf) {
+            showQuickActionError('Security token unavailable.');
+            return;
         }
+
+        const transition = beginTransition(target, control, expectedState);
+        invalidateProviderObservation(target);
+        publishSync('begin', target, control, expectedState);
+
+        button.replaceWith(createTransitionIndicator(transition, item));
 
         try {
             if (kind === 'docker') {
@@ -3210,9 +3530,11 @@ jnd_settings_json([
                     type: 'POST',
                     dataType: 'json',
                     timeout: ACTION_TIMEOUT_MS,
+                    jndLifecycleOwned: true,
                     data: {
                         action,
                         container: id,
+                        csrf_token: csrf,
                     },
                 });
 
@@ -3225,9 +3547,11 @@ jnd_settings_json([
                     type: 'POST',
                     dataType: 'json',
                     timeout: ACTION_TIMEOUT_MS,
+                    jndLifecycleOwned: true,
                     data: {
                         action,
                         uuid: id,
+                        csrf_token: csrf,
                     },
                 });
 
@@ -3236,7 +3560,12 @@ jnd_settings_json([
                 }
             }
 
-            state.cache.delete(target);
+            markTransitionActionComplete(control);
+            cacheInvalidate(target, {bumpEpoch: false});
+            publishSync('refresh', target, control, expectedState);
+
+            await new Promise(resolve => setTimeout(resolve, NATIVE_LIFECYCLE_REFRESH_DELAY_MS));
+            refreshStockPage(target);
 
             if (state.activeTarget === target) {
                 try {
@@ -3253,10 +3582,11 @@ jnd_settings_json([
             }
         } catch (error) {
             clearTransition(control);
+            publishSync('cancel', target, control, expectedState);
             console.warn(`[JND] ${kind} quick action failed:`, error);
             showQuickActionError(error?.message || error);
 
-            state.cache.delete(target);
+            cacheInvalidate(target, {bumpEpoch: false});
             stopTransitionPolling();
 
             try {
@@ -3311,15 +3641,7 @@ jnd_settings_json([
          * its full HTML content payload.
          */
         const remotes = await loadDynamicProvider('ud_remotes');
-        const items = Array.isArray(remotes) ? remotes : [];
-
-        if (!items.length) return [];
-
-        return [
-            {type: 'separator'},
-            {type: 'heading', label: 'Unassigned Devices'},
-            ...items,
-        ];
+        return Array.isArray(remotes) ? remotes : [];
     }
 
     function composeMainItems() {
@@ -3340,7 +3662,13 @@ jnd_settings_json([
 
         state.udInFlight = loadUDItems()
             .then(items => {
-                state.udItems = cloneData(Array.isArray(items) ? items : []);
+                const remotes = cloneData(Array.isArray(items) ? items : []);
+                cachePut('ud_remotes', remotes);
+                state.udItems = remotes.length ? [
+                    {type: 'separator'},
+                    {type: 'heading', label: 'Unassigned Devices'},
+                    ...remotes,
+                ] : [];
                 state.udLoaded = true;
                 state.udCacheTime = Date.now();
 
@@ -3367,8 +3695,26 @@ jnd_settings_json([
         return state.udInFlight;
     }
 
+    function restoreMainUDCache() {
+        if (!BOOT.features?.ud || state.udLoaded) return;
+
+        const hit = cachePeek('ud_remotes');
+        if (!hit) return;
+
+        const remotes = cloneData(hit.items);
+        state.udItems = remotes.length ? [
+            {type: 'separator'},
+            {type: 'heading', label: 'Unassigned Devices'},
+            ...remotes,
+        ] : [];
+        state.udLoaded = true;
+        state.udCacheTime = hit.time;
+    }
+
     function ensureMainUDFresh() {
-        if (!BOOT.features?.ud || mainUDIsFresh()) return;
+        if (!BOOT.features?.ud) return;
+        restoreMainUDCache();
+        if (mainUDIsFresh()) return;
         void refreshMainUD();
     }
 
@@ -3419,21 +3765,251 @@ jnd_settings_json([
                 reconcileTransitions(target, cached);
                 return cached;
             }
+
+            if (dynamic) {
+                const stale = cachePeek(target);
+                if (stale) {
+                    reconcileTransitions(target, stale.items);
+                    void refreshProvider(target, {renderIfOpen: true}).catch(error => {
+                        console.warn(`[JND] ${target} stale revalidation failed:`, error);
+                    });
+                    return stale.items;
+                }
+            }
         }
 
-        let items;
-
-        if (target === 'Docker') {
-            items = await loadDynamicProvider('docker');
-        } else if (target === 'VMs') {
-            items = await loadDynamicProvider('vms');
-        } else {
-            items = cloneData(BOOT.providers[target] || []);
+        if (!dynamic) {
+            const items = sortItemsForTarget(target, cloneData(BOOT.providers[target] || []));
+            reconcileTransitions(target, items);
+            return cachePut(target, items);
         }
 
-        items = sortItemsForTarget(target, items);
-        reconcileTransitions(target, items);
-        return cachePut(target, items);
+        if (forceFresh && state.inFlight.has(target)) {
+            try {
+                await state.inFlight.get(target);
+            } catch (_) {
+                // A failed older observation must not prevent this authoritative refresh.
+            }
+        }
+
+        return refreshProvider(target, {renderIfOpen: false});
+    }
+
+    function refreshProvider(target, options = {}) {
+        const existing = state.inFlight.get(target);
+        if (existing) return existing;
+
+        const provider = target === 'Docker' ? 'docker' : (target === 'VMs' ? 'vms' : '');
+        if (!provider) return Promise.reject(new Error(`Unsupported dynamic provider: ${target}`));
+
+        const observationEpoch = providerEpoch(target);
+        const request = loadDynamicProvider(provider)
+            .then(items => {
+                const normalized = sortItemsForTarget(target, items);
+                reconcileTransitions(target, normalized);
+
+                /*
+                 * A lifecycle action can begin while this request is in flight.
+                 * Never allow an observation that started before that boundary to
+                 * repopulate cache or overwrite the visible post-action state.
+                 */
+                if (providerEpoch(target) !== observationEpoch) {
+                    return cloneData(normalized);
+                }
+
+                cachePut(target, normalized);
+
+                if (options.renderIfOpen && state.activeTarget === target && state.activeNavItem?.isConnected) {
+                    renderMenu(normalized);
+                    requestAnimationFrame(positionOverlay);
+                }
+
+                return cloneData(normalized);
+            })
+            .finally(() => {
+                if (state.inFlight.get(target) === request) state.inFlight.delete(target);
+            });
+
+        state.inFlight.set(target, request);
+        return request;
+    }
+
+    async function warmDynamicProviders() {
+        if (state.warmQueueStarted) return;
+        state.warmQueueStarted = true;
+
+        for (const target of ['Docker', 'VMs']) {
+            if (!TARGETS.includes(target)) continue;
+            const hit = cachePeek(target);
+            if (hit && Date.now() - hit.time <= DYNAMIC_CACHE_MS) continue;
+
+            try {
+                await refreshProvider(target, {renderIfOpen: true});
+            } catch (error) {
+                console.warn(`[JND] ${target} background warm-up failed:`, error);
+            }
+        }
+    }
+
+    function revalidateStaleDynamicProviders() {
+        for (const target of ['Docker', 'VMs']) {
+            if (!TARGETS.includes(target)) continue;
+            const hit = cachePeek(target);
+            if (hit && Date.now() - hit.time <= DYNAMIC_CACHE_MS) continue;
+            void refreshProvider(target, {renderIfOpen: true}).catch(error => {
+                console.warn(`[JND] ${target} lifecycle revalidation failed:`, error);
+            });
+        }
+    }
+
+    function parseAjaxData(data) {
+        if (!data) return {};
+        if (typeof data === 'object' && !Array.isArray(data)) return data;
+        if (typeof data !== 'string') return {};
+        const out = {};
+        for (const [key, value] of new URLSearchParams(data)) out[key] = value;
+        return out;
+    }
+
+    function nativeMutationTarget(url, data) {
+        let path = '';
+        try { path = new URL(String(url || ''), window.location.origin).pathname; }
+        catch (_) { return ''; }
+        const action = cleanText(parseAjaxData(data).action);
+        if (!action) return '';
+        if (path.endsWith('/plugins/dynamix.docker.manager/include/Events.php') &&
+            ['start', 'stop', 'pause', 'resume', 'restart'].includes(action)) return 'Docker';
+        if (path.endsWith('/plugins/dynamix.docker.manager/include/ContainerManager.php') &&
+            ['start', 'stop', 'pause', 'unpause'].includes(action)) return 'Docker';
+        if (path.endsWith('/plugins/dynamix.vm.manager/include/VMajax.php') &&
+            ['domain-start', 'domain-stop', 'domain-pause', 'domain-resume', 'domain-restart',
+             'domain-pmsuspend', 'domain-pmwakeup', 'domain-destroy',
+             'domain-start-console', 'domain-start-consoleRV'].includes(action)) return 'VMs';
+        if (path.endsWith('/plugins/dynamix.vm.manager/include/VMManager.php') &&
+            ['start', 'stop'].includes(action)) return 'VMs';
+        return '';
+    }
+
+    function nativeTransitionDescriptor(url, data) {
+        let path = '';
+        try { path = new URL(String(url || ''), window.location.origin).pathname; }
+        catch (_) { return null; }
+
+        const parsed = parseAjaxData(data);
+        const action = cleanText(parsed.action);
+
+        if (path.endsWith('/plugins/dynamix.docker.manager/include/Events.php') &&
+            ['start', 'stop'].includes(action)) {
+            const control = {kind: 'docker', id: cleanText(parsed.container), action};
+            const expectedState = expectedStateForControl(control);
+            return validSyncControl('Docker', control, expectedState)
+                ? {target: 'Docker', control, expectedState}
+                : null;
+        }
+
+        if (path.endsWith('/plugins/dynamix.vm.manager/include/VMajax.php') &&
+            ['domain-start', 'domain-stop'].includes(action)) {
+            const control = {kind: 'vm', id: cleanText(parsed.uuid), action};
+            const expectedState = expectedStateForControl(control);
+            return validSyncControl('VMs', control, expectedState)
+                ? {target: 'VMs', control, expectedState}
+                : null;
+        }
+
+        return null;
+    }
+
+    function nativeMutationApplicationFailed(xhr, descriptor) {
+        if (!descriptor) return false;
+        let response = xhr?.responseJSON;
+        if ((!response || typeof response !== 'object') && typeof xhr?.responseText === 'string') {
+            try { response = JSON.parse(xhr.responseText); } catch (_) { response = null; }
+        }
+        if (!response || typeof response !== 'object') return false;
+        if (descriptor.target === 'Docker' && Object.prototype.hasOwnProperty.call(response, 'success')) {
+            return response.success !== true;
+        }
+        if (descriptor.target === 'VMs') {
+            return Boolean(response.error);
+        }
+        return false;
+    }
+
+    function nativeListTarget(url) {
+        let path = '';
+        try { path = new URL(String(url || ''), window.location.origin).pathname; }
+        catch (_) { return ''; }
+        if (path.endsWith('/plugins/dynamix.docker.manager/include/DockerContainers.php')) return 'Docker';
+        if (path.endsWith('/plugins/dynamix.vm.manager/include/VMMachines.php')) return 'VMs';
+        return '';
+    }
+
+    function attachNativeLifecycleObserver() {
+        if (!window.jQuery?.fn?.jquery) return;
+        const pagePath = window.location.pathname.replace(/\/+$/, '') || '/';
+        const pageTarget = pagePath === '/Docker' ? 'Docker' : (pagePath === '/VMs' ? 'VMs' : '');
+        if (!pageTarget || !TARGETS.includes(pageTarget)) return;
+
+        window.jQuery(document).on('ajaxSend.jndNativeLifecycle', (_event, _xhr, settings) => {
+            if (settings?.jndLifecycleOwned === true) return;
+
+            const mutationTarget = nativeMutationTarget(settings?.url, settings?.data);
+            if (!mutationTarget || mutationTarget !== pageTarget) return;
+
+            const descriptor = nativeTransitionDescriptor(settings?.url, settings?.data);
+            if (!descriptor || descriptor.target !== pageTarget) return;
+
+            const snapshot = state.activeTarget === pageTarget ? cachePeek(pageTarget)?.items : null;
+            beginTransition(descriptor.target, descriptor.control, descriptor.expectedState);
+            invalidateProviderObservation(descriptor.target);
+            publishSync('begin', descriptor.target, descriptor.control, descriptor.expectedState);
+            renderTransitionSnapshot(descriptor.target, snapshot);
+        });
+
+        window.jQuery(document).on('ajaxComplete.jndNativeLifecycle', (_event, xhr, settings) => {
+            if (settings?.jndLifecycleOwned === true) return;
+
+            const status = Number(xhr?.status || 0);
+            const mutationTarget = nativeMutationTarget(settings?.url, settings?.data);
+
+            if (mutationTarget) {
+                if (mutationTarget !== pageTarget) return;
+                const descriptor = nativeTransitionDescriptor(settings?.url, settings?.data);
+                const failed =
+                    status < 200 ||
+                    status >= 400 ||
+                    nativeMutationApplicationFailed(xhr, descriptor);
+
+                if (failed) {
+                    if (descriptor) {
+                        clearTransition(descriptor.control);
+                        publishSync('cancel', descriptor.target, descriptor.control, descriptor.expectedState);
+                    }
+                    invalidateProviderObservation(mutationTarget);
+                    refreshOpenProvider(mutationTarget, 'native failure');
+                } else if (descriptor) {
+                    markTransitionActionComplete(descriptor.control);
+                    publishSync('refresh', descriptor.target, descriptor.control, descriptor.expectedState);
+                }
+                return;
+            }
+
+            if (status < 200 || status >= 400) return;
+            const listTarget = nativeListTarget(settings?.url);
+            if (!listTarget || listTarget !== pageTarget) return;
+            invalidateProviderObservation(listTarget);
+            refreshOpenProvider(listTarget, 'native lifecycle');
+        });
+    }
+
+    function attachBrowserLifecycleRevalidation() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') revalidateStaleDynamicProviders();
+        });
+        window.addEventListener('online', revalidateStaleDynamicProviders);
+        window.addEventListener('pageshow', event => {
+            if (event.persisted === true) revalidateStaleDynamicProviders();
+        });
     }
 
     function attachNav(anchor, target) {
@@ -3483,6 +4059,9 @@ jnd_settings_json([
         if (!count) return false;
 
         ensureOverlay();
+        attachCrossTabSync();
+        attachNativeLifecycleObserver();
+        attachBrowserLifecycleRevalidation();
         state.attached = true;
 
         /*
@@ -3490,7 +4069,11 @@ jnd_settings_json([
          * after the stock navigation is attached. This is fire-and-forget:
          * page rendering and menu interaction never wait for it.
          */
-        if (TARGETS.includes('Main')) ensureMainUDFresh();
+        if (TARGETS.includes('Main')) {
+            restoreMainUDCache();
+            if (!mainUDIsFresh()) void refreshMainUD();
+        }
+        setTimeout(() => { void warmDynamicProviders(); }, 0);
 
         document.addEventListener('pointerdown', (event) => {
             if (!state.overlay?.classList.contains('jnd-visible')) return;
@@ -3533,14 +4116,14 @@ Adds dynamic dropdown menus to the Unraid WebGUI for Main, Shares, Users, Settin
 </FILE>
 <FILE Name="&runtime;/version.txt" Mode="0644">
 <INLINE><![CDATA[
-1.0.0
+1.0.2
 ]]></INLINE>
 </FILE>
 <FILE Name="&runtime;/.jnd-production" Mode="0644">
 <INLINE><![CDATA[
 PLUGIN_ID=nav.dropdown.menus
-VERSION=1.0.0
-CHANNEL=production
+VERSION=1.0.2
+CHANNEL=candidate
 ]]></INLINE>
 </FILE>
 <FILE Name="/tmp/nav.dropdown.menus.icon.b64" Mode="0600">
@@ -4536,7 +5119,7 @@ fi
 echo ""
 echo "-----------------------------------------------------------"
 echo " Navigation Dropdown Menus installed"
-echo " Version: 1.0.0"
+echo " Version: 1.0.2"
 echo " Runtime: $RUNTIME"
 echo " Config:  $CFG"
 echo " Stock Unraid files modified: NO"

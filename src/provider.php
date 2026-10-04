@@ -196,6 +196,7 @@ try {
                     'href' => $href,
                     'state' => $state,
                     'statusKind' => 'docker',
+                    'statusId' => $containerId,
                     'icon' => $icon,
                     'control' => $control,
                     'log' => [
@@ -293,6 +294,7 @@ try {
                     'href' => '/VMs/UpdateVM?uuid=' . rawurlencode($uuid),
                     'state' => $state,
                     'statusKind' => 'vm',
+                    'statusId' => $uuid,
                     'icon' => $icon,
                     'control' => $control,
                     'log' => $vmLog !== '' ? [

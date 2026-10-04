@@ -385,6 +385,14 @@ $sortMode = jnd_settings_choice($cfg, 'SORT_MODE', ['unraid', 'alphabetical'], '
             payload[control.dataset.jndSetting] = control.value;
         }
 
+        const csrf = typeof window.csrf_token === 'string' ? window.csrf_token : '';
+        if (!csrf) {
+            status.textContent = 'Save failed. Security token unavailable.';
+            setTimeout(syncApply, 0);
+            return;
+        }
+        payload.csrf_token = csrf;
+
         button.disabled = true;
         status.textContent = 'Saving...';
 
