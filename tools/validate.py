@@ -106,7 +106,7 @@ def validate():
             s=(ROOT/"src"/n).read_text();need("---\n" in s,"page delimiter "+n)
             f=td/(n+".php");f.write_text(s.split("---\n",1)[1]);run([php,"-l",str(f)])
         d=td/"vars.php";d.write_text("""<?php
-$src=file_get_contents($argv[1]);$parts=explode("---\\n",$src,2);$tokens=token_get_all("<?php\\n".$parts[1]);$depth=0;$vars=[];
+$src=str_replace(chr(13).chr(10),chr(10),file_get_contents($argv[1]));$parts=explode("---\\n",$src,2);$tokens=token_get_all("<?php\\n".$parts[1]);$depth=0;$vars=[];
 foreach($tokens as $tok){if(is_string($tok)){if($tok==='{')$depth++;elseif($tok==='}')$depth--;}elseif($tok[0]===T_VARIABLE&&$depth===0){$vars[$tok[1]]=true;}}
 ksort($vars);echo implode(",",array_keys($vars));?>""")
         if run([php,"-r",'exit(function_exists("token_get_all")?0:1);'],allow_failure=True).returncode==0:
